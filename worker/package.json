@@ -1,0 +1,27 @@
+{
+  "name": "@orbit/worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Orb.IT durable job worker: ingestion, transcription, analysis and brief generation",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
+    "@supabase/supabase-js": "^2.118.0",
+    "tsx": "^4.23.15",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
