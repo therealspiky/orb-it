@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+/* Orb.IT tokens: studio-panel paper, deep ink, signal amber for anything
+   uncertain or pending, muted green for verified, brick for blocked/failed. */
+@theme {
+  --color-paper: #f1f3ef;
+  --color-surface: #fbfcfa;
+  --color-line: #d5dad2;
+  --color-line-strong: #b9c0b5;
+  --color-ink: #17233b;
+  --color-ink-soft: #46516a;
+  --color-ink-faint: #7a8396;
+  --color-rail: #17233b;
+  --color-signal: #d8902a;
+  --color-signal-soft: #f7e7cc;
+  --color-verified: #2e6f52;
+  --color-verified-soft: #dcebe2;
+  --color-blocked: #a8402c;
+  --color-blocked-soft: #f3ddd7;
+  --color-focus: #2f5bd3;
+
+  --font-sans: "Schibsted Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Source Serif 4", ui-serif, Georgia, serif;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+}
+
+html, body, #root { height: 100%; }
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; border-radius: 3px; }
+
+/* Source material is set in the serif so it never reads like interface copy. */
+.source-text { font-family: var(--font-serif); font-size: 16px; line-height: 1.65; }
+
+.field-input {
+  width: 100%;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line-strong);
+  border-radius: var(--radius-md);
+  padding: 7px 10px;
+  font: inherit;
+  color: inherit;
+}
+.field-input:focus { outline: 2px solid var(--color-focus); outline-offset: -1px; border-color: transparent; }
+textarea.field-input { min-height: 88px; resize: vertical; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  border-radius: var(--radius-md); padding: 7px 14px;
+  font-weight: 600; font-size: 14px; line-height: 1.2;
+  border: 1px solid transparent; cursor: pointer; white-space: nowrap;
+}
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary { background: var(--color-ink); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: #22314f; }
+.btn-quiet { background: transparent; border-color: var(--color-line-strong); color: var(--color-ink); }
+.btn-quiet:hover:not(:disabled) { background: #e7ebe4; }
+.btn-approve { background: var(--color-verified); color: #fff; }
+.btn-danger { background: transparent; color: var(--color-blocked); border-color: var(--color-blocked); }
+.btn-sm { padding: 4px 10px; font-size: 13px; }
+
+.panel { background: var(--color-surface); border: 1px solid var(--color-line); border-radius: var(--radius-lg); }
+
+/* Evidence markers: the brief's citations, styled as tally lamps. */
+.tally {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-weight: 700; font-size: 12px; letter-spacing: .02em;
+  padding: 2px 7px 2px 5px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--color-line-strong); background: var(--color-surface); color: var(--color-ink);
+}
+.tally::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--color-signal); }
+.tally[data-state="verified"]::before, .tally[data-state="auto_matched"]::before { background: var(--color-verified); }
+.tally[data-state="auto_matched"]::before { box-shadow: inset 0 0 0 2px var(--color-surface); border: 1px solid var(--color-verified); }
+.tally[data-state="failed"]::before { background: var(--color-blocked); }
+.tally[data-active="true"] { background: var(--color-ink); color: #fff; border-color: var(--color-ink); }
+
+.seg-active { background: var(--color-signal-soft); box-shadow: inset 3px 0 0 var(--color-signal); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
