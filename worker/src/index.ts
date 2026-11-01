@@ -64,7 +64,8 @@ async function loop() {
   while (!stopping) {
     const { data, error } = await db.rpc('claim_job', { p_worker: cfg.workerId });
     if (error) {
-      log('claim.error', { error: error.message });
+      // Network failures put the real reason (DNS, TLS, proxy) in details/hint.
+      log('claim.error', { error: error.message, details: (error as { details?: string }).details?.slice(0, 600), hint: (error as { hint?: string }).hint, url: cfg.supabaseUrl });
       await new Promise((r) => setTimeout(r, cfg.pollMs * 3));
       continue;
     }
