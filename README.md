@@ -76,12 +76,17 @@ The service role key bypasses row-level security. It belongs only on the worker 
 
 ```bash
 cd web
-cp .env.example .env.local         # Supabase URL + anon key
 npm install
 npm run dev                        # http://localhost:5173
 ```
 
-Deploy `web/` to any static host (Vercel, Netlify, Cloudflare Pages) with the same two variables.
+The project URL and anon key are already in `web/.env.development` and `web/.env.production`
+(the anon key is public by design; row-level security protects the data).
+
+**Deploy:** import the GitHub repo into Vercel, Netlify or Cloudflare Pages with root directory `web`,
+build command `npm run build`, output directory `dist`. SPA routing is configured (`vercel.json`, `public/_redirects`).
+Then in Supabase **Authentication → URL Configuration**, set the Site URL to the deployed address so
+confirmation emails link back to the app.
 
 ### 4. First run
 
