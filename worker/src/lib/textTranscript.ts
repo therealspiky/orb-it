@@ -85,7 +85,31 @@ export function parseTextTranscript(raw: string, kind: 'transcript' | 'notes'): 
       is_uncertain: false,
     };
   });
-  return { segments, timestampsGenuine: monotonic };
+  return { segments: monotonic ? mergeTimedFragments(segments) : segments, timestampsGenuine: monotonic };
+}
+
+/**
+ * Timed transcripts from YouTube and similar tools put a short fragment on every
+ * line. Merge consecutive fragments from the same speaker into passages of up to
+ * ~25 s, breaking at a sentence end once a passage is at least 8 s long.
+ * Times stay genuine: a passage starts at its first fragment and ends where the
+ * next passage begins.
+ */
+export function mergeTimedFragments(segs: Segment[]): Segment[] {
+  const out: Segment[] = [];
+  for (const s of segs) {
+    const p = out[out.length - 1];
+    const sameSpeaker = !!p && (p.speaker === s.speaker || s.speaker === null);
+    const span = p && p.start_ms != null && s.start_ms != null ? s.start_ms - p.start_ms : Infinity;
+    const sentenceEnd = !!p && /[.!?…]["”’)]?$/.test(p.text);
+    if (p && sameSpeaker && span < 25_000 && !(sentenceEnd && span >= 8000)) {
+      p.text += ' ' + s.text;
+      p.end_ms = s.end_ms;
+    } else {
+      out.push({ ...s });
+    }
+  }
+  return out.map((s, idx) => ({ ...s, idx }));
 }
 
 // ---------------------------------------------------------------------------

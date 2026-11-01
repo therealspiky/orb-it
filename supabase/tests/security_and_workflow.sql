@@ -393,6 +393,27 @@ begin
     'edited versions keep the brand profile version they were written against');
 end $$;
 
+-- Creating a source from the app (INSERT ... RETURNING as a signed-in user) ----------
+do $$
+declare new_id uuid;
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000b', true);
+  execute 'set local role authenticated';
+  insert into sources (org_id, brand_id, show_id, kind, title, share_scope)
+  values ((select v from t_ids where k='org'), (select v from t_ids where k='hitz'), (select v from t_ids where k='hitz_morning'),
+          'transcript', 'Pasted transcript', 'organisation')
+  returning id into new_id;
+  execute 'reset role';
+  perform pg_temp.ok(new_id is not null, 'a producer can create a source and read it back in the same request');
+  perform pg_temp.ok((select status from sources where id = new_id) = 'queued'
+    and (select uploaded_by from sources where id = new_id) = '00000000-0000-0000-0000-00000000000b',
+    'new sources start queued and record who uploaded them');
+  perform pg_temp.ok(pg_temp.fails_as('00000000-0000-0000-0000-00000000000b',
+    format($q$insert into sources (org_id, brand_id, show_id, kind, title) values (%L, %L, %L, 'transcript', 'x') returning id$q$,
+      (select v from t_ids where k='org'), (select v from t_ids where k='joy'), (select v from t_ids where k='tys'))),
+    'a producer cannot create sources for a show outside their scope');
+end $$;
+
 -- Episode map ---------------------------------------------------------------------
 insert into episode_maps (org_id, source_id, transcript_fingerprint, model, prompt_version, result)
 select (select v from t_ids where k='org'), (select v from t_ids where k='src_shared'), 'fp', 'm', 'p', '{"conversations":[{"key":"c1"}]}';

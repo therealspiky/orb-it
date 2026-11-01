@@ -101,3 +101,25 @@ describe('Word and other files', () => {
     await expect(readTextSource('a.pdf', 'application/pdf', Buffer.from('x'))).rejects.toThrow(/cannot be read/);
   });
 });
+
+describe('timed fragment transcripts (YouTube "show transcript" style)', () => {
+  it('merges two-second fragments into passages with genuine times', () => {
+    const lines: string[] = [];
+    for (let i = 0; i < 30; i++) {
+      const t = 3065 + i * 2; // seconds from 00:51:05
+      const mm = String(Math.floor(t / 60)).padStart(2, '0'), ss = String(t % 60).padStart(2, '0');
+      lines.push(`00:${mm}:${ss}.220 fragment number ${i}`);
+    }
+    const p = parseTextTranscript(lines.join('\n'), 'transcript');
+    expect(p.timestampsGenuine).toBe(true);
+    expect(p.segments.length).toBe(3); // 60 s of fragments in ~25 s passages
+    expect(p.segments[0]!.start_ms).toBe(3065 * 1000);
+    expect(p.segments[0]!.text.startsWith('fragment number 0 fragment number 1')).toBe(true);
+    expect(p.segments.map((s) => s.idx)).toEqual([0, 1, 2]);
+  });
+
+  it('does not merge across speakers', () => {
+    const p = parseTextTranscript('[00:00:01] HOST: Hi\n[00:00:03] GUEST: Hello\n[00:00:05] HOST: Welcome', 'transcript');
+    expect(p.segments.map((s) => s.speaker)).toEqual(['HOST', 'GUEST', 'HOST']);
+  });
+});
