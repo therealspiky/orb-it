@@ -13,6 +13,7 @@ export interface Config {
   supabaseUrl: string;
   supabaseServiceKey: string;
   anthropicKey: string;
+  anthropicWorkspaceId?: string;
   transcribeProvider: TranscribeProvider;
   openaiKey?: string;
   openaiTranscribeModel: string;
@@ -24,6 +25,9 @@ export interface Config {
   pollMs: number;
   maxUploadMb: number;
   chunkSeconds: number;
+  googleClientId?: string;
+  googleClientSecret?: string;
+  youtubeApiKey?: string;
 }
 
 /** Loads worker/.env if present (real environment variables take precedence). */
@@ -44,6 +48,7 @@ export function loadConfig(): Config {
     supabaseUrl: req('SUPABASE_URL'),
     supabaseServiceKey: req('SUPABASE_SERVICE_ROLE_KEY'),
     anthropicKey: req('ANTHROPIC_API_KEY'),
+    anthropicWorkspaceId: process.env.ANTHROPIC_WORKSPACE_ID || undefined,
     transcribeProvider,
     openaiKey: process.env.OPENAI_API_KEY,
     // whisper-1 returns real segment timestamps via verbose_json.
@@ -56,6 +61,10 @@ export function loadConfig(): Config {
     pollMs: Number(process.env.POLL_MS ?? 3000),
     maxUploadMb: Number(process.env.MAX_UPLOAD_MB ?? 2048),
     chunkSeconds: Number(process.env.CHUNK_SECONDS ?? 600),
+    // YouTube (optional): OAuth client for connecting channels, API key for video details.
+    googleClientId: process.env.GOOGLE_CLIENT_ID || undefined,
+    googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || undefined,
+    youtubeApiKey: process.env.YOUTUBE_API_KEY || undefined,
   };
   if (cfg.transcribeProvider === 'openai' && !cfg.openaiKey) {
     throw new Error('OPENAI_API_KEY is required when TRANSCRIBE_PROVIDER=openai');

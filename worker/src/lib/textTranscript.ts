@@ -38,7 +38,9 @@ export function parseTextTranscript(raw: string, kind: 'transcript' | 'notes'): 
     };
   }
 
-  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  let lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+  // Export tools (Tactiq and similar) put '# …' header lines (tool name, title, URL) before the transcript.
+  while (lines.length && /^#\s/.test(lines[0]!)) lines = lines.slice(1);
   const timed = lines.filter((l) => TIME_RE.test(l)).length;
   const useTimes = lines.length > 0 && timed / lines.length >= 0.8;
 

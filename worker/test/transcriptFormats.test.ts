@@ -123,3 +123,12 @@ describe('timed fragment transcripts (YouTube "show transcript" style)', () => {
     expect(p.segments.map((s) => s.speaker)).toEqual(['HOST', 'GUEST', 'HOST']);
   });
 });
+
+describe('export headers', () => {
+  it('drops "# " header lines that transcript tools put before the text', () => {
+    const p = parseTextTranscript('# tactiq.io free youtube transcript\n# Show title\n# https://www.youtube.com/watch/abc\n00:00:00.000 hello and welcome\n00:00:03.000 to the show', 'transcript');
+    expect(p.segments).toHaveLength(1);
+    expect(p.segments[0]!.text).toBe('hello and welcome to the show');
+    expect(p.timestampsGenuine).toBe(true);
+  });
+});

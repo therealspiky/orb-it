@@ -31,8 +31,15 @@ export function estimateTokens(text: string): number {
 
 export class AnthropicLlm implements LlmClient {
   private client: Anthropic;
-  constructor(apiKey: string) {
-    this.client = new Anthropic({ apiKey, maxRetries: 3 });
+  /**
+   * Keys not scoped to a workspace in the Anthropic Console must name the
+   * workspace on every request (anthropic-workspace-id header).
+   */
+  constructor(apiKey: string, workspaceId?: string) {
+    this.client = new Anthropic({
+      apiKey, maxRetries: 3,
+      defaultHeaders: workspaceId ? { 'anthropic-workspace-id': workspaceId } : undefined,
+    });
   }
 
   async structured<T>(call: StructuredCall<T>): Promise<StructuredResult<T>> {

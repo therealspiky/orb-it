@@ -449,4 +449,38 @@ do $$ begin
     'a map from a different source cannot be used');
 end $$;
 
+-- YouTube connections ------------------------------------------------------------
+insert into youtube_connections (org_id, channel_id, channel_title)
+select v, 'UC_test', 'Test Channel' from t_ids where k='org';
+insert into youtube_credentials (connection_id, refresh_token)
+select id, 'secret-refresh-token' from youtube_connections;
+
+do $$ begin
+  perform pg_temp.ok(pg_temp.fails_as('00000000-0000-0000-0000-00000000000b',
+    format($q$select public.submit_youtube_oauth_code(%L, 'code', 'http://localhost:5173/integrations/youtube')$q$, (select v from t_ids where k='org'))),
+    'a producer cannot connect a YouTube channel');
+  perform pg_temp.ok(not pg_temp.fails_as('00000000-0000-0000-0000-00000000000a',
+    format($q$select public.submit_youtube_oauth_code(%L, 'code', 'http://localhost:5173/integrations/youtube')$q$, (select v from t_ids where k='org'))),
+    'an admin hands the OAuth code to the worker');
+  perform pg_temp.ok((select count(*) from jobs where kind = 'youtube_connect') = 1, 'a connect job is queued for the worker');
+  perform pg_temp.ok(pg_temp.fails_as('00000000-0000-0000-0000-00000000000a', 'select * from youtube_credentials'),
+    'refresh tokens are unreadable even for admins');
+  perform pg_temp.ok(pg_temp.fails_as('00000000-0000-0000-0000-00000000000a', 'select * from oauth_pending'),
+    'pending OAuth codes are unreadable from the app');
+  perform pg_temp.ok(pg_temp.count_as('00000000-0000-0000-0000-00000000000b', 'select * from youtube_connections') = 1,
+    'members can see which channels are connected');
+  perform pg_temp.ok(pg_temp.count_as('00000000-0000-0000-0000-00000000000d', 'select * from youtube_connections') = 0,
+    'other organisations cannot see our channels');
+  perform pg_temp.ok(pg_temp.fails_as('00000000-0000-0000-0000-00000000000a',
+    format($q$select public.enqueue_job(%L, 'youtube_connect', '{}'::jsonb, 'x')$q$, (select v from t_ids where k='org'))),
+    'connect jobs cannot be created directly');
+  perform pg_temp.ok(not pg_temp.fails_as('00000000-0000-0000-0000-00000000000a',
+    format($q$select public.enqueue_job(%L, 'youtube_import', %L::jsonb, 'yt-1')$q$, (select v from t_ids where k='org'),
+      jsonb_build_object('source_id', (select v from t_ids where k='src_shared')))),
+    'an editor of a source can queue a YouTube import for it');
+  perform pg_temp.ok(pg_temp.fails_as('00000000-0000-0000-0000-00000000000a',
+    format($q$update sources set external='{"title":"x"}' where id=%L$q$, (select v from t_ids where k='src_shared'))),
+    'platform metadata is written by the worker, not edited by users');
+end $$;
+
 \echo 'database tests complete'

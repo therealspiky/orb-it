@@ -30,12 +30,13 @@ export interface SourceRow {
   timestamps_genuine: boolean;
   author: string | null;
   status: string;
+  external?: Record<string, unknown>;
 }
 
 export interface JobRow {
   id: string;
   org_id: string;
-  kind: 'transcribe' | 'analyse' | 'generate_briefs' | 'map_episode';
+  kind: 'transcribe' | 'analyse' | 'generate_briefs' | 'map_episode' | 'youtube_import' | 'youtube_connect';
   payload: Record<string, unknown>;
   attempts: number;
   max_attempts: number;
