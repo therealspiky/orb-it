@@ -59,8 +59,8 @@ export function SourcesPage() {
 
 const ACCEPT: Record<SourceKind, string> = {
   recording: 'audio/*,video/*',
-  transcript: '.txt,.srt,.vtt,text/plain',
-  notes: '.txt,.md,text/plain',
+  transcript: '.txt,.srt,.vtt,.docx,text/plain,text/vtt,application/x-subrip,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  notes: '.txt,.md,.docx,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 };
 
 function AddSource({ onDone }: { onDone: () => void }) {
@@ -68,7 +68,7 @@ function AddSource({ onDone }: { onDone: () => void }) {
   const navigate = useNavigate();
   const workBrands = brands.filter((b) => !b.archived_at && (can(WORK_ROLES, b.id) || shows.some((s) => s.brand_id === b.id && can(WORK_ROLES, b.id, s.id))));
   const [form, setForm] = useState({
-    kind: 'recording' as SourceKind, brand_id: workBrands[0]?.id ?? '', show_id: '', title: '', programme_name: '',
+    kind: 'transcript' as SourceKind, brand_id: workBrands[0]?.id ?? '', show_id: '', title: '', programme_name: '',
     origin_url: '', language: 'mixed', share_scope: 'brand', rights_status: 'unknown', rights_notes: '', author: '',
   });
   const [file, setFile] = useState<File | null>(null);
@@ -118,8 +118,8 @@ function AddSource({ onDone }: { onDone: () => void }) {
     <form className="panel p-5 md:p-6 mb-8 grid gap-4 md:grid-cols-2" onSubmit={(e: FormEvent) => { e.preventDefault(); submit.mutate(); }}>
       <Field label="Type">
         <select className="field-input" value={form.kind} onChange={(e) => { set('kind', e.target.value); setFile(null); }}>
+          <option value="transcript">Transcript or captions (fastest)</option>
           <option value="recording">Recording (audio or video)</option>
-          <option value="transcript">Transcript</option>
           <option value="notes">Producer notes</option>
         </select>
       </Field>
@@ -163,7 +163,11 @@ function AddSource({ onDone }: { onDone: () => void }) {
         <Field label="Author"><input className="field-input" value={form.author} onChange={(e) => set('author', e.target.value)} /></Field>
       )}
       <div className="md:col-span-2">
-        <Field label={form.kind === 'recording' ? 'Recording file' : 'File'} help={form.kind === 'recording' ? 'Audio or video. A SHA-256 fingerprint is recorded so the original can be proven unchanged.' : 'Upload a text file, or paste below.'}>
+        <Field label={form.kind === 'recording' ? 'Recording file' : 'File'} help={form.kind === 'recording'
+          ? 'Audio or video. For long shows, upload audio only (an MP3 of a 60-minute show is about 30–60 MB); Orb.IT transcribes it with real timestamps so every moment can be played back.'
+          : form.kind === 'transcript'
+            ? 'A .txt or Word (.docx) transcript, or caption files (.srt, .vtt) exported from your editing tool or YouTube. Caption files keep their timings, so moments can be cited by time. Nothing is transcribed, so this is ready in seconds.'
+            : 'A text or Word file, or paste below.'}>
           <input className="field-input" type="file" accept={ACCEPT[form.kind]} onChange={(e) => setFile(e.target.files?.[0] ?? null)} required={form.kind === 'recording'} />
         </Field>
         {form.kind !== 'recording' && !file && (

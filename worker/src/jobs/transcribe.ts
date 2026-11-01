@@ -7,6 +7,21 @@ import { probe, sha256File } from '../lib/media.js';
 import { parseTextTranscript } from '../lib/textTranscript.js';
 import type { Transcriber } from '../lib/transcribers.js';
 import { PermanentError, type JobRow, type Segment } from '../types.js';
+import mammoth from 'mammoth';
+
+const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+/** Text of an uploaded transcript or notes file (.txt, .srt, .vtt, .md or Word .docx). */
+export async function readTextSource(path: string, mime: string | null, bytes: Buffer): Promise<string> {
+  if (mime === DOCX || /\.docx$/i.test(path)) {
+    const { value } = await mammoth.extractRawText({ buffer: bytes });
+    return value;
+  }
+  if (/\.(doc|pdf|pages|rtf)$/i.test(path)) {
+    throw new PermanentError('This file type cannot be read as a transcript. Upload .txt, .srt, .vtt or .docx, or paste the text.');
+  }
+  return bytes.toString('utf8').replace(/^\uFEFF/, '');
+}
 
 export interface TranscribeDeps { db: Db; cfg: Config; transcriber: Transcriber }
 
@@ -65,7 +80,7 @@ export async function runTranscribe(job: JobRow, deps: TranscribeDeps): Promise<
       timestampsGenuine = true;
       providerInfo = { provider: result.provider, model: result.model, format: p.formatName, has_video: p.hasVideo };
     } else {
-      const text = await dl.data.text();
+      const text = await readTextSource(src.storage_path, src.mime_type, Buffer.from(await dl.data.arrayBuffer()));
       const parsed = parseTextTranscript(text, src.kind);
       segments = parsed.segments;
       timestampsGenuine = parsed.timestampsGenuine;

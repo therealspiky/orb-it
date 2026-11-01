@@ -24,6 +24,9 @@ export interface ParsedText {
 export function parseTextTranscript(raw: string, kind: 'transcript' | 'notes'): ParsedText {
   const text = raw.replace(/\r\n?/g, '\n').replace(/ /g, ' ');
 
+  // Caption files (SRT / WebVTT) exported from editing tools, YouTube or Descript.
+  if (kind === 'transcript' && /\d{1,2}:\d{2}(?:[.,]\d{1,3})?\s*-->\s*\d/.test(text)) return parseCaptions(text);
+
   if (kind === 'notes') {
     // Notes become paragraph segments with no speaker and no time.
     const paras = text.split(/\n\s*\n/).map((p) => p.replace(/\s+/g, ' ').trim()).filter(Boolean);
@@ -83,4 +86,97 @@ export function parseTextTranscript(raw: string, kind: 'transcript' | 'notes'): 
     };
   });
   return { segments, timestampsGenuine: monotonic };
+}
+
+// ---------------------------------------------------------------------------
+// SRT / WebVTT captions
+// ---------------------------------------------------------------------------
+const CUE_TIME = /^\s*((?:\d{1,2}:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?)\s*-->\s*((?:\d{1,2}:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?)/;
+
+export function parseCueTime(s: string): number {
+  const [clock, frac = '0'] = s.trim().replace(',', '.').split('.');
+  return parseClock(clock!) + Math.round(Number(`0.${frac}`) * 1000);
+}
+
+interface Cue { start: number; end: number; speaker: string | null; text: string }
+
+function cleanCueText(lines: string[]): { speaker: string | null; text: string } {
+  let speaker: string | null = null;
+  const parts: string[] = [];
+  for (let line of lines) {
+    const v = /<v(?:\.[^ >]*)?\s+([^>]+)>/.exec(line);
+    if (v) speaker = v[1]!.trim();
+    line = line
+      .replace(/<\d{1,2}:\d{2}(?::\d{2})?[.,]\d{1,3}>/g, '') // VTT inline timestamps
+      .replace(/<\/?[^>]+>/g, '')                             // VTT/HTML tags
+      .replace(/\{\\[^}]*\}/g, '')                            // SSA override tags like {\an8}
+      .replace(/^\s*[-–]\s+/, '')                             // dialogue dash
+      .trim();
+    if (!line) continue;
+    const sm = SPEAKER_RE.exec(line);
+    if (sm && sm[1]!.length <= 30) { speaker = sm[1]!.trim(); line = sm[2]!.trim(); }
+    else {
+      const bracket = /^\[([^\]]{1,30})\]\s*:?\s*(.+)$/.exec(line);
+      if (bracket && /^[A-Z]/.test(bracket[1]!)) { speaker = bracket[1]!.trim(); line = bracket[2]!; }
+    }
+    parts.push(line);
+  }
+  return { speaker, text: parts.join(' ').replace(/\s+/g, ' ').trim() };
+}
+
+/**
+ * Parses caption cues and merges them into readable passages. Cue times come
+ * from the editing tool, so they are kept when they run in order. Rolling
+ * auto-captions (each cue repeating the previous line) are de-duplicated.
+ */
+export function parseCaptions(text: string): ParsedText {
+  const cues: Cue[] = [];
+  let lastText = '';
+  for (const block of text.split(/\n\s*\n/)) {
+    const lines = block.split('\n').map((l) => l.trimEnd());
+    const ti = lines.findIndex((l) => CUE_TIME.test(l));
+    if (ti < 0) continue; // WEBVTT header, NOTE, STYLE, REGION
+    const m = CUE_TIME.exec(lines[ti]!)!;
+    const cleaned = cleanCueText(lines.slice(ti + 1));
+    let t = cleaned.text;
+    if (!t) continue;
+    if (lastText) {
+      const prevWords = lastText.split(' ');
+      for (let k = Math.min(prevWords.length, 20); k > 0; k--) {
+        const tail = prevWords.slice(-k).join(' ');
+        if (t === tail) { t = ''; break; }
+        if (t.startsWith(tail + ' ')) { t = t.slice(tail.length + 1); break; }
+      }
+      if (!t) continue;
+    }
+    cues.push({ start: parseCueTime(m[1]!), end: parseCueTime(m[2]!), speaker: cleaned.speaker, text: t });
+    lastText = cleaned.text;
+  }
+
+  // Merge short cues into passages: same speaker, small gap, up to ~25 s,
+  // breaking at a sentence end once a passage is at least 8 s long.
+  const merged: Cue[] = [];
+  for (const c of cues) {
+    const p = merged[merged.length - 1];
+    const sameSpeaker = !p || p.speaker === c.speaker || c.speaker === null;
+    const gap = p ? c.start - p.end : 0;
+    const len = p ? c.end - p.start : 0;
+    const sentenceEnd = p ? /[.!?…]["”’)]?$/.test(p.text) : false;
+    if (p && sameSpeaker && gap < 2000 && len <= 25_000 && !(sentenceEnd && p.end - p.start >= 8000)) {
+      p.text += ' ' + c.text;
+      p.end = Math.max(p.end, c.end);
+    } else {
+      merged.push({ ...c });
+    }
+  }
+
+  let monotonic = merged.length > 0;
+  for (let i = 1; i < merged.length && monotonic; i++) if (merged[i]!.start < merged[i - 1]!.start) monotonic = false;
+  return {
+    timestampsGenuine: monotonic,
+    segments: merged.map((c, idx) => ({
+      idx, start_ms: monotonic ? c.start : null, end_ms: monotonic ? c.end : null,
+      speaker: c.speaker, text: c.text, confidence: null, is_uncertain: false,
+    })),
+  };
 }
