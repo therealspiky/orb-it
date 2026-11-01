@@ -34,7 +34,7 @@ acceptance test is passed until the pilot runs it on fresh sources with real key
 | AT09 post-show and series | **Not built** — Phase 2. |
 | AT10 memory correction | Correction propagation and access revocation covered by database checks. Editorial memory search is not built. |
 | AT11 guests and advertisers | **Not built** — guests are roles only; directories come in P1. |
-| AT12 connectors and languages | Languages partly built. **YouTube and RSS ingestion not built.** |
+| AT12 connectors and languages | YouTube link import built (official API: details for any public video, captions for connected channels, paste fallback); SRT/VTT/Word transcripts supported. **RSS ingestion not built.** Not yet run against live YouTube. |
 
 ## Next, in order
 

@@ -310,6 +310,16 @@ function SourceFacts({ source, canEdit, onSaved }: { source: Source; canEdit: bo
   return (
     <div className="panel p-4 text-sm space-y-3">
       <h2 className="font-semibold">Source record</h2>
+      {source.external?.platform === 'youtube' && (
+        <a href={source.external.url ?? source.origin_url ?? '#'} target="_blank" rel="noreferrer" className="flex gap-3 items-start rounded-md border border-line p-2 hover:bg-paper">
+          {source.external.thumbnail && <img src={source.external.thumbnail} alt="" className="w-28 aspect-video object-cover rounded" />}
+          <span className="min-w-0">
+            <span className="block font-semibold leading-snug">{source.external.title}</span>
+            <span className="block text-ink-faint">{[source.external.channel_title, source.external.published_at && new Date(source.external.published_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }), source.external.duration_seconds ? clock(source.external.duration_seconds * 1000) : null].filter(Boolean).join(' · ')}</span>
+            {source.external.caption_track && <span className="block text-ink-faint">Captions: {source.external.caption_track.kind.toLowerCase() === 'asr' ? 'YouTube auto-generated' : source.external.caption_track.name || 'uploaded'} ({source.external.caption_track.language})</span>}
+          </span>
+        </a>
+      )}
       <dl className="grid grid-cols-[110px_1fr] gap-y-1">
         <dt className="text-ink-faint">Language</dt><dd>{LANGUAGE_LABEL[source.language] ?? source.language}</dd>
         {source.duration_seconds != null && <><dt className="text-ink-faint">Duration</dt><dd>{clock(source.duration_seconds * 1000)}</dd></>}
@@ -343,25 +353,42 @@ function SourceFacts({ source, canEdit, onSaved }: { source: Source; canEdit: bo
 
 function RetryUpload({ source, onDone }: { source: Source; onDone: () => void }) {
   const [file, setFile] = useState<File | null>(null);
+  const [pasted, setPasted] = useState('');
+  const textSource = source.kind !== 'recording';
+  const waiting = source.status === 'needs_attention' || source.status === 'failed';
   const upload = useMutation({
     mutationFn: async () => {
-      const checksum = await sha256(file!);
-      const path = `${source.org_id}/${source.id}/${safeName(file!.name)}`;
-      const up = await supabase.storage.from('media').upload(path, file!, { contentType: file!.type || 'application/octet-stream', upsert: false });
+      const blob: Blob = file ?? new Blob([pasted], { type: 'text/plain' });
+      if (!blob.size) throw new Error('Choose a file or paste the text first');
+      const checksum = await sha256(blob);
+      const path = `${source.org_id}/${source.id}/${file ? safeName(file.name) : 'transcript.txt'}`;
+      const up = await supabase.storage.from('media').upload(path, blob, { contentType: blob.type || 'application/octet-stream', upsert: false });
       if (up.error) throw new Error(up.error.message);
-      check(await supabase.rpc('attach_source_upload', { p_source: source.id, p_path: path, p_checksum: checksum, p_size: file!.size, p_mime: file!.type || null }));
-      check(await supabase.rpc('enqueue_job', { p_org: source.org_id, p_kind: 'transcribe', p_payload: { source_id: source.id }, p_idempotency_key: `transcribe:${source.id}` }));
+      check(await supabase.rpc('attach_source_upload', { p_source: source.id, p_path: path, p_checksum: checksum, p_size: blob.size, p_mime: blob.type || null }));
+      check(await supabase.rpc('enqueue_job', { p_org: source.org_id, p_kind: 'transcribe', p_payload: { source_id: source.id }, p_idempotency_key: `transcribe:${source.id}:${checksum.slice(0, 12)}` }));
     },
     onSuccess: onDone,
   });
+  if (source.status === 'queued' || source.status === 'processing') return null;
   return (
-    <div className="panel p-4 bg-signal-soft">
-      <p className="font-semibold">No file is attached to this source yet.</p>
-      <p className="text-sm text-ink-soft mb-2">The upload may have been interrupted. Choose the file again to finish.</p>
-      <div className="flex gap-2">
-        <input type="file" className="field-input" onChange={(e) => setFile(e.target.files?.[0] ?? null)} aria-label="File to upload" />
-        <button className="btn btn-primary" disabled={!file || upload.isPending} onClick={() => upload.mutate()}>Upload</button>
+    <div className="panel p-4 bg-signal-soft space-y-3">
+      <div>
+        <p className="font-semibold">{textSource ? 'Add the transcript to continue' : 'No file is attached to this source yet.'}</p>
+        <p className="text-sm text-ink-soft">
+          {waiting && source.status_message ? source.status_message : textSource
+            ? 'Upload a transcript or caption file, or paste the text. From YouTube, use "Show transcript" under the video, or an export tool.'
+            : 'The upload may have been interrupted. Choose the file again to finish.'}
+        </p>
       </div>
+      <input type="file" className="field-input" accept={textSource ? '.txt,.srt,.vtt,.docx' : undefined}
+        onChange={(e) => setFile(e.target.files?.[0] ?? null)} aria-label="File to upload" />
+      {textSource && !file && (
+        <textarea className="field-input source-text min-h-[160px]" placeholder="Or paste the transcript here" aria-label="Transcript text"
+          value={pasted} onChange={(e) => setPasted(e.target.value)} />
+      )}
+      <button className="btn btn-primary" disabled={(!file && !pasted.trim()) || upload.isPending} onClick={() => upload.mutate()}>
+        {textSource ? 'Add transcript' : 'Upload'}
+      </button>
       <ErrorNote error={upload.error} />
     </div>
   );

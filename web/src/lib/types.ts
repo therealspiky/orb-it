@@ -44,6 +44,7 @@ export interface Source {
   size_bytes: number | null; checksum_sha256: string | null; duration_seconds: number | null; language: string;
   twi_beta: boolean; rights_status: string; rights_notes: string | null; share_scope: 'show' | 'brand' | 'organisation';
   timestamps_genuine: boolean; author: string | null; status: SourceStatus; status_message: string | null;
+  external: import('./youtube').ExternalMeta;
   created_at: string;
 }
 export interface Segment {

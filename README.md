@@ -100,6 +100,10 @@ build command `npm run build`, output directory `dist`. SPA routing is configure
 Then in Supabase **Authentication → URL Configuration**, set the Site URL to the deployed address so
 confirmation emails link back to the app.
 
+### YouTube (optional)
+
+Paste a YouTube link in Add source to fill in the video's details; connect your channels to import their captions automatically. Setup: [docs/YOUTUBE.md](docs/YOUTUBE.md).
+
 ### 4. First run
 
 1. Create an account and your organisation. You become its administrator.

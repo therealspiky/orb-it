@@ -2,6 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 import { Empty, ErrorNote, Field, PageHeader } from '../components/ui';
+import { YouTubeChannels } from '../components/YouTubeChannels';
 import { useOrg, usePeople } from '../lib/org';
 import { check, supabase } from '../lib/supabase';
 import { ROLE_LABEL, type Membership, type Role } from '../lib/types';
@@ -116,6 +117,8 @@ export function AdminPage() {
         )}
         <ErrorNote error={addBrand.error} />
       </section>
+
+      <YouTubeChannels />
 
       <section>
         <h2 className="text-lg font-semibold mb-1">People and roles</h2>

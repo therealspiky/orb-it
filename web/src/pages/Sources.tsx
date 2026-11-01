@@ -5,6 +5,7 @@ import { Empty, ErrorNote, Field, PageHeader, SourceBadge, Spinner } from '../co
 import { safeName, sha256 } from '../lib/checksum';
 import { ago, bytes, LANGUAGE_LABEL } from '../lib/format';
 import { useOrg } from '../lib/org';
+import { parseVideoId } from '../lib/youtube';
 import { check, supabase } from '../lib/supabase';
 import { WORK_ROLES, type Source, type SourceKind } from '../lib/types';
 
@@ -77,35 +78,57 @@ function AddSource({ onDone }: { onDone: () => void }) {
   const [duplicate, setDuplicate] = useState<Source | null>(null);
   const set = (k: keyof typeof form, v: string) => setForm({ ...form, [k]: v });
   const brandShows = shows.filter((s) => s.brand_id === form.brand_id && !s.archived_at);
+  const ytId = parseVideoId(form.origin_url);
+  // With a YouTube link, a transcript is optional: captions come from a connected channel, or are pasted later.
+  const captionsFromYouTube = !!ytId && form.kind === 'transcript' && !file && !pasted.trim();
 
   const submit = useMutation({
     mutationFn: async () => {
       setDuplicate(null);
       const blob: Blob = file ?? new Blob([pasted], { type: 'text/plain' });
       const filename = file ? safeName(file.name) : `${form.kind}.txt`;
-      if (!blob.size) throw new Error('Choose a file or paste the text first');
+      const hasContent = blob.size > 0;
+      if (!hasContent && !captionsFromYouTube) throw new Error('Choose a file or paste the text first');
 
-      setStep('Fingerprinting file');
-      const checksum = await sha256(blob);
-      const dup = await supabase.from('sources').select('*').eq('org_id', org!.id).eq('checksum_sha256', checksum).maybeSingle();
-      if (dup.data) { setDuplicate(dup.data as Source); throw new Error('This exact content has already been added.'); }
+      if (ytId) {
+        setStep('Checking for this video');
+        const seen = await supabase.from('sources').select('*').eq('org_id', org!.id).ilike('origin_url', `%${ytId}%`).limit(1).maybeSingle();
+        if (seen.data) { setDuplicate(seen.data as Source); throw new Error('This YouTube video has already been added.'); }
+      }
+      let checksum = '';
+      if (hasContent) {
+        setStep('Fingerprinting file');
+        checksum = await sha256(blob);
+        const dup = await supabase.from('sources').select('*').eq('org_id', org!.id).eq('checksum_sha256', checksum).maybeSingle();
+        if (dup.data) { setDuplicate(dup.data as Source); throw new Error('This exact content has already been added.'); }
+      }
 
       setStep('Creating source record');
+      const fillTitle = !!ytId && !form.title.trim();
       const src = check(await supabase.from('sources').insert({
-        org_id: org!.id, brand_id: form.brand_id, show_id: form.show_id || null, kind: form.kind, title: form.title.trim(),
+        org_id: org!.id, brand_id: form.brand_id, show_id: form.show_id || null, kind: form.kind, title: form.title.trim() || 'YouTube video',
         programme_name: form.programme_name || null, origin_url: form.origin_url || null, language: form.language,
         twi_beta: form.language === 'tw', share_scope: form.share_scope, rights_status: form.rights_status,
         rights_notes: form.rights_notes || null, author: form.author || null,
       }).select('*').single()) as Source;
 
-      setStep(`Uploading ${bytes(blob.size)}`);
-      const path = `${org!.id}/${src.id}/${filename}`;
-      const up = await supabase.storage.from('media').upload(path, blob, { contentType: blob.type || 'application/octet-stream', upsert: false });
-      if (up.error) throw new Error(`Upload failed: ${up.error.message}. The source was created; open it to retry the upload.`);
-      check(await supabase.rpc('attach_source_upload', { p_source: src.id, p_path: path, p_checksum: checksum, p_size: blob.size, p_mime: blob.type || null }));
-
-      setStep('Queuing transcription');
-      check(await supabase.rpc('enqueue_job', { p_org: org!.id, p_kind: 'transcribe', p_payload: { source_id: src.id }, p_idempotency_key: `transcribe:${src.id}` }));
+      if (hasContent) {
+        setStep(`Uploading ${bytes(blob.size)}`);
+        const path = `${org!.id}/${src.id}/${filename}`;
+        const up = await supabase.storage.from('media').upload(path, blob, { contentType: blob.type || 'application/octet-stream', upsert: false });
+        if (up.error) throw new Error(`Upload failed: ${up.error.message}. The source was created; open it to retry the upload.`);
+        check(await supabase.rpc('attach_source_upload', { p_source: src.id, p_path: path, p_checksum: checksum, p_size: blob.size, p_mime: blob.type || null }));
+        setStep('Queuing transcription');
+        check(await supabase.rpc('enqueue_job', { p_org: org!.id, p_kind: 'transcribe', p_payload: { source_id: src.id }, p_idempotency_key: `transcribe:${src.id}` }));
+      }
+      if (ytId) {
+        setStep(captionsFromYouTube ? 'Asking YouTube for details and captions' : 'Asking YouTube for details');
+        check(await supabase.rpc('enqueue_job', {
+          p_org: org!.id, p_kind: 'youtube_import',
+          p_payload: { source_id: src.id, fetch_captions: captionsFromYouTube, fill_title: fillTitle },
+          p_idempotency_key: `youtube:${src.id}`,
+        }));
+      }
       return src;
     },
     onSettled: () => setStep(null),
@@ -123,7 +146,14 @@ function AddSource({ onDone }: { onDone: () => void }) {
           <option value="notes">Producer notes</option>
         </select>
       </Field>
-      <Field label="Title"><input className="field-input" value={form.title} onChange={(e) => set('title', e.target.value)} required placeholder="Episode or item title" /></Field>
+      <Field label="Link (YouTube or other)" help={ytId ? 'YouTube video recognised: title, channel, date and duration are filled in for you.' : 'Paste a YouTube link to fill in the details automatically.'}>
+        <input className="field-input" type="url" value={form.origin_url} onChange={(e) => set('origin_url', e.target.value)} placeholder="https://www.youtube.com/watch?v=…" />
+      </Field>
+      <div className="md:col-span-2">
+        <Field label="Title" help={ytId ? 'Leave blank to use the YouTube title.' : undefined}>
+          <input className="field-input" value={form.title} onChange={(e) => set('title', e.target.value)} required={!ytId} placeholder={ytId ? 'Filled in from YouTube' : 'Episode or item title'} />
+        </Field>
+      </div>
       <Field label="Brand">
         <select className="field-input" value={form.brand_id} onChange={(e) => setForm({ ...form, brand_id: e.target.value, show_id: '' })}>
           {workBrands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -136,7 +166,6 @@ function AddSource({ onDone }: { onDone: () => void }) {
         </select>
       </Field>
       <Field label="Originating programme" help="As it should be attributed."><input className="field-input" value={form.programme_name} onChange={(e) => set('programme_name', e.target.value)} /></Field>
-      <Field label="Origin link"><input className="field-input" type="url" value={form.origin_url} onChange={(e) => set('origin_url', e.target.value)} placeholder="https://" /></Field>
       <Field label="Language" help={form.language === 'tw' ? 'Twi is a supervised beta: every passage is flagged for a qualified reviewer.' : undefined}>
         <select className="field-input" value={form.language} onChange={(e) => set('language', e.target.value)}>
           {Object.entries(LANGUAGE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -169,6 +198,12 @@ function AddSource({ onDone }: { onDone: () => void }) {
             ? 'A .txt or Word (.docx) transcript, or caption files (.srt, .vtt) exported from your editing tool or YouTube. Caption files keep their timings, so moments can be cited by time. Nothing is transcribed, so this is ready in seconds.'
             : 'A text or Word file, or paste below.'}>
           <input className="field-input" type="file" accept={ACCEPT[form.kind]} onChange={(e) => setFile(e.target.files?.[0] ?? null)} required={form.kind === 'recording'} />
+          {ytId && form.kind === 'transcript' && (
+            <span className="block text-[13px] mt-2 bg-paper border border-line rounded-md px-3 py-2">
+              Optional for YouTube links. Leave the file and text empty and Orb.IT imports the captions if the video's channel is connected
+              (Organisation → YouTube channels); otherwise the source waits for you to paste the transcript.
+            </span>
+          )}
         </Field>
         {form.kind !== 'recording' && !file && (
           <div className="mt-3">
@@ -179,7 +214,9 @@ function AddSource({ onDone }: { onDone: () => void }) {
         )}
       </div>
       <div className="md:col-span-2 flex flex-wrap items-center gap-3">
-        <button className="btn btn-primary" disabled={submit.isPending || !form.title.trim() || !form.brand_id}>Add and process</button>
+        <button className="btn btn-primary" disabled={submit.isPending || (!form.title.trim() && !ytId) || !form.brand_id}>
+          {captionsFromYouTube ? 'Import from YouTube' : 'Add and process'}
+        </button>
         {step && <span className="text-sm text-ink-soft" aria-live="polite">{step}…</span>}
       </div>
       <div className="md:col-span-2">

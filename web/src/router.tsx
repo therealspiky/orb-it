@@ -10,6 +10,7 @@ import { ReviewsPage } from './pages/Reviews';
 import { ShowProfilePage } from './pages/ShowProfile';
 import { SourceDetailPage } from './pages/SourceDetail';
 import { SourcesPage } from './pages/Sources';
+import { YouTubeCallbackPage } from './pages/YouTubeCallback';
 
 const root = createRootRoute({ component: () => <Outlet /> });
 const login = createRoute({ getParentRoute: () => root, path: '/login', component: LoginPage });
@@ -24,11 +25,12 @@ const sources = createRoute({ getParentRoute: () => app, path: '/sources', compo
 const sourceDetail = createRoute({ getParentRoute: () => app, path: '/sources/$sourceId', component: SourceDetailPage });
 const briefs = createRoute({ getParentRoute: () => app, path: '/briefs', component: BriefsPage });
 const brief = createRoute({ getParentRoute: () => app, path: '/briefs/$briefId', component: BriefWorkspace });
+const ytCallback = createRoute({ getParentRoute: () => app, path: '/integrations/youtube', component: YouTubeCallbackPage });
 const reviews = createRoute({ getParentRoute: () => app, path: '/reviews', component: ReviewsPage });
 
 const routeTree = root.addChildren([
   login, onboarding,
-  app.addChildren([home, admin, brandProfile, showProfile, sources, sourceDetail, briefs, brief, reviews]),
+  app.addChildren([home, admin, brandProfile, showProfile, sources, sourceDetail, briefs, brief, reviews, ytCallback]),
 ]);
 
 export const router = createRouter({ routeTree, defaultPreload: 'intent' });
