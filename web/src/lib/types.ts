@@ -65,6 +65,7 @@ export interface Brief {
   id: string; org_id: string; brand_id: string; show_id: string; origin_source_id: string | null;
   generation_group: string | null; title: string; status: BriefStatus; recommendation: 'proceed' | 'research' | null;
   current_version_id: string | null; evidence_changed_at: string | null; status_reason: string | null;
+  episode_map_id: string | null; conversation_key: string | null;
   created_at: string; updated_at: string;
 }
 export interface BriefVersion {
@@ -124,4 +125,18 @@ export interface SocialAsset {
   asset_type: string; platform: string; format: string; hook: string; caption_draft: string;
   clip_candidate: { segment_start: number; segment_end: number; rationale: string } | null;
   thumbnail_direction: string | null; render_state?: 'planned' | 'rendering' | 'rendered' | 'failed';
+}
+
+// Episode map (mirrors worker/src/lib/schemas.ts EpisodeMapSchema after validation)
+export interface MapConversation {
+  key: string; question: string; summary: string; angle: string; why_it_travels: string;
+  moments: { segment_start: number; segment_end: number; hook: string | null; note: string; start_ms: number | null; end_ms: number | null }[];
+  needs_outside_evidence: boolean; sensitivities: string[];
+  show_fits: { show_id: string; fit: 'strong' | 'possible'; treatment: string; why: string }[];
+  platform_fits: { platform: string; format: string; why: string }[];
+}
+export interface EpisodeMapRow {
+  id: string; source_id: string; created_at: string; model: string; considered_shows: string[];
+  result: { summary: string; conversations: MapConversation[] };
+  validation: { skipped_no_profile?: number };
 }

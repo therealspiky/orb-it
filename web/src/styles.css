@@ -42,6 +42,8 @@ body {
 /* Source material is set in the serif so it never reads like interface copy. */
 .source-text { font-family: var(--font-serif); font-size: 16px; line-height: 1.65; }
 
+/* Component classes sit in the components layer so utilities (w-auto, text-sm…) can override them. */
+@layer components {
 .field-input {
   width: 100%;
   background: var(--color-surface);
@@ -53,6 +55,7 @@ body {
 }
 .field-input:focus { outline: 2px solid var(--color-focus); outline-offset: -1px; border-color: transparent; }
 textarea.field-input { min-height: 88px; resize: vertical; }
+}
 
 .btn {
   display: inline-flex; align-items: center; gap: 6px;

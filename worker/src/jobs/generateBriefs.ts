@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Config } from '../config.js';
 import { audit, getSegments, getSource, jobProgress, must, type Db } from '../lib/db.js';
 import type { LlmClient } from '../lib/llm.js';
-import { BRIEF_PROMPT_VERSION, BRIEF_SYSTEM, briefUserPrompt, describeSource, renderTranscript } from '../lib/prompts.js';
+import { BRIEF_PROMPT_VERSION, BRIEF_SYSTEM, briefUserPrompt, describeSource, renderTranscript, type BriefFocus } from '../lib/prompts.js';
 import { BriefSchema, type Brief } from '../lib/schemas.js';
 import { validateBrief, type EvidenceRow } from '../lib/validateBrief.js';
 import { PermanentError, type JobRow, type SourceRow } from '../types.js';
@@ -40,6 +40,7 @@ export function buildBriefRows(args: {
   brief: Brief; evidence: EvidenceRow[]; validation: unknown;
   src: SourceRow; show: ShowRow; profileVersionId: string; brandProfileVersionId: string | null;
   group: string; model: string; createdBy: string | null;
+  mapLink?: { episodeMapId: string; conversationKey: string } | null;
 }) {
   const { brief, evidence, src, show } = args;
   const briefId = randomUUID();
@@ -64,6 +65,7 @@ export function buildBriefRows(args: {
     brief: {
       id: briefId, org_id: show.org_id, brand_id: show.brand_id, show_id: show.id, origin_source_id: src.id,
       generation_group: args.group, title: brief.title, status, recommendation: brief.recommendation,
+      episode_map_id: args.mapLink?.episodeMapId ?? null, conversation_key: args.mapLink?.conversationKey ?? null,
       created_by: args.createdBy,
     },
     briefSource: { brief_id: briefId, source_id: src.id, org_id: src.org_id },
@@ -87,6 +89,17 @@ export async function runGenerateBriefs(job: JobRow, deps: GenerateDeps): Promis
   const showIds = (job.payload.show_ids as string[] | undefined) ?? [];
   if (!showIds.length) throw new PermanentError('No destination shows selected');
   const group = String(job.payload.generation_group ?? job.id);
+
+  // Optional focus: one conversation from the episode map (loaded from the stored map, not the request).
+  let mapLink: { episodeMapId: string; conversationKey: string } | null = null;
+  let conversation: any = null;
+  if (job.payload.episode_map_id) {
+    const m = await db.from('episode_maps').select('id,source_id,result').eq('id', String(job.payload.episode_map_id)).maybeSingle();
+    if (!m.data || m.data.source_id !== src.id) throw new PermanentError('Episode map not found for this source');
+    conversation = ((m.data.result as any)?.conversations ?? []).find((c: any) => c.key === job.payload.conversation_key);
+    if (!conversation) throw new PermanentError('Conversation not found in the episode map');
+    mapLink = { episodeMapId: m.data.id as string, conversationKey: conversation.key };
+  }
 
   const segments = await getSegments(db, src.id);
   if (!segments.length) throw new PermanentError('Source has no transcript');
@@ -144,6 +157,7 @@ export async function runGenerateBriefs(job: JobRow, deps: GenerateDeps): Promis
         brandProfile: bpv?.profile ?? null, brandProfileVersion: bpv?.version ?? null,
         analysis, priorCoverage: prior.map((p) => ({ title: p.title, status: p.status, reason: p.status_reason })),
         siblingTreatments: siblings,
+        focus: conversation ? focusFor(conversation, show.id) : null,
       }),
       toolName: 'record_brief',
       toolDescription: 'Record the complete opportunity brief for the destination show.',
@@ -158,7 +172,7 @@ export async function runGenerateBriefs(job: JobRow, deps: GenerateDeps): Promis
     }
     const rows = buildBriefRows({
       brief: v.brief, evidence: v.evidence, validation: { ...v.report, usage: res.usage },
-      src, show, profileVersionId: pv.id, brandProfileVersionId: bpv?.id ?? null, group, model: res.model, createdBy: job.created_by,
+      src, show, profileVersionId: pv.id, brandProfileVersionId: bpv?.id ?? null, group, model: res.model, createdBy: job.created_by, mapLink,
     });
     must(await db.from('briefs').insert(rows.brief).select('id').single(), 'insert brief');
     must(await db.from('brief_sources').insert(rows.briefSource).select('brief_id'), 'insert brief source');
@@ -177,4 +191,13 @@ export async function runGenerateBriefs(job: JobRow, deps: GenerateDeps): Promis
     throw new PermanentError(`No briefs created: ${skipped.map((s) => `${s.show} (${s.reason})`).join(', ') || 'nothing to do'}`);
   }
   return { created, skipped, group };
+}
+
+/** Brief focus for one mapped conversation and destination show. */
+export function focusFor(c: any, showId: string): BriefFocus {
+  return {
+    question: String(c.question ?? ''), summary: String(c.summary ?? ''), angle: String(c.angle ?? 'other'),
+    moments: (c.moments ?? []).map((m: any) => ({ segment_start: m.segment_start, segment_end: m.segment_end, note: String(m.note ?? '') })),
+    suggestedTreatment: (c.show_fits ?? []).find((f: any) => f.show_id === showId)?.treatment ?? null,
+  };
 }

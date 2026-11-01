@@ -7,7 +7,8 @@ import { safeName, sha256 } from '../lib/checksum';
 import { ago, bytes, clock, LANGUAGE_LABEL } from '../lib/format';
 import { useOrg } from '../lib/org';
 import { check, supabase } from '../lib/supabase';
-import { WORK_ROLES, type Brief, type Job, type Segment, type Source } from '../lib/types';
+import { WORK_ROLES, type Brief, type EpisodeMapRow, type Job, type Segment, type Source } from '../lib/types';
+import { EpisodeMap } from '../components/EpisodeMap';
 
 interface Analysis {
   summary: string;
@@ -53,6 +54,12 @@ export function SourceDetailPage() {
     queryKey: ['source-briefs', sourceId, jobs.data?.[0]?.status],
     queryFn: async () => check(await supabase.from('briefs').select('*').eq('origin_source_id', sourceId).order('created_at', { ascending: false })) as Brief[],
   });
+  const map = useQuery({
+    queryKey: ['episode-map', sourceId, jobs.data?.find((j) => j.kind === 'map_episode')?.status],
+    enabled: !!s,
+    queryFn: async () => (await supabase.from('episode_maps').select('*').eq('source_id', sourceId)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle()).data as EpisodeMapRow | null,
+  });
   const mediaUrl = useQuery({
     queryKey: ['media-url', s?.storage_path],
     enabled: !!s?.storage_path && s.kind === 'recording',
@@ -63,8 +70,20 @@ export function SourceDetailPage() {
   const canEdit = s ? can(WORK_ROLES, s.brand_id, s.show_id) : false;
   const visible = useMemo(() => (segments.data ?? []).filter((x) => !onlyUncertain || x.is_uncertain), [segments.data, onlyUncertain]);
   const uncertainCount = (segments.data ?? []).filter((x) => x.is_uncertain).length;
-  const activeJob = jobs.data?.find((j) => ['queued', 'running'].includes(j.status));
+  const activeJob = jobs.data?.find((j) => ['queued', 'running'].includes(j.status) && j.kind !== 'map_episode');
+  const mappingJob = jobs.data?.find((j) => j.kind === 'map_episode' && ['queued', 'running'].includes(j.status))
+    ?? (jobs.data?.find((j) => j.kind === 'analyse' && ['queued', 'running'].includes(j.status)) && !map.data ? { progress: 5, message: 'Reading the episode' } as Job : undefined);
   const failedJob = jobs.data?.[0]?.status === 'failed' ? jobs.data[0] : null;
+
+  function playAt(ms: number) {
+    const seg = (segments.data ?? []).find((x) => x.start_ms != null && x.start_ms <= ms && (x.end_ms ?? Infinity) > ms);
+    if (seg) setActiveIdx(seg.idx);
+    if (mediaRef.current) {
+      mediaRef.current.currentTime = ms / 1000;
+      void mediaRef.current.play();
+      mediaRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
 
   function seek(seg: Segment) {
     setActiveIdx(seg.idx);
@@ -101,10 +120,16 @@ export function SourceDetailPage() {
             </div>
           )}
 
+          {(segments.data || map.data) && (
+            <EpisodeMap source={s} map={map.data ?? null} briefs={briefs.data ?? []}
+              mapping={mappingJob ? { progress: mappingJob.progress, message: mappingJob.message } : null}
+              onPlay={playAt} onQueued={() => { void jobs.refetch(); void briefs.refetch(); }} />
+          )}
+
           {segments.data && (
-            <section>
-              <div className="flex flex-wrap items-baseline justify-between gap-3 mb-2">
-                <h2 className="text-lg font-semibold">Transcript</h2>
+            <details className="group" open={!map.data}>
+              <summary className="flex flex-wrap items-baseline justify-between gap-3 mb-2 cursor-pointer list-none">
+                <h2 className="text-lg font-semibold"><span className="inline-block w-4 text-ink-faint group-open:rotate-90 transition-transform">›</span> Transcript</h2>
                 <div className="flex items-center gap-4 text-sm">
                   {uncertainCount > 0 && (
                     <label className="flex items-center gap-1.5">
@@ -114,7 +139,7 @@ export function SourceDetailPage() {
                   )}
                   <span className="text-ink-faint">{segments.data.length} passages{s.timestamps_genuine ? '' : ', no timestamps'}</span>
                 </div>
-              </div>
+              </summary>
               {s.twi_beta && <p className="text-sm bg-signal-soft rounded-md px-3 py-2 mb-3">Twi beta: every passage needs checking by a qualified Twi speaker before it is used.</p>}
               <ol className="panel divide-y divide-line">
                 {visible.map((seg) => (
@@ -122,7 +147,7 @@ export function SourceDetailPage() {
                     canEdit={canEdit} onSeek={() => seek(seg)} onSaved={() => void segments.refetch()} />
                 ))}
               </ol>
-            </section>
+            </details>
           )}
           {['queued', 'processing'].includes(s.status) && !segments.data && (
             <Empty title="Transcript on its way">Recordings are transcribed with real timestamps. This page updates by itself.</Empty>
@@ -244,8 +269,8 @@ function GenerateBriefs({ source, disabled, uncertain, onQueued }: { source: Sou
 
   return (
     <div className="panel p-4">
-      <h2 className="font-semibold">Develop briefs</h2>
-      <p className="text-sm text-ink-soft mt-0.5 mb-3">Pick the shows to write for. Each gets its own treatment, built from its approved profile.</p>
+      <h2 className="font-semibold">General brief</h2>
+      <p className="text-sm text-ink-soft mt-0.5 mb-3">Skip the map and let Orb.IT choose the angle for each show. To develop a specific conversation, use the episode map.</p>
       {eligible.some((sh) => !brands.find((b) => b.id === sh.brand_id)?.current_profile_version_id) && (
         <p className="text-[13px] text-ink mb-3 bg-signal-soft rounded px-2 py-1">
           Some brands have no approved brand profile. Their briefs will not reflect station-wide identity and standards until one is approved.

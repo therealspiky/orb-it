@@ -1,6 +1,7 @@
 import { loadConfig } from './config.js';
 import { runAnalyse } from './jobs/analyse.js';
 import { runGenerateBriefs } from './jobs/generateBriefs.js';
+import { runMapEpisode } from './jobs/mapEpisode.js';
 import { runTranscribe } from './jobs/transcribe.js';
 import { makeDb, setSourceStatus } from './lib/db.js';
 import { AnthropicLlm } from './lib/llm.js';
@@ -22,6 +23,7 @@ async function execute(job: JobRow): Promise<Record<string, unknown>> {
     case 'transcribe': return runTranscribe(job, { db, cfg, transcriber });
     case 'analyse': return runAnalyse(job, { db, cfg, llm });
     case 'generate_briefs': return runGenerateBriefs(job, { db, cfg, llm });
+    case 'map_episode': return runMapEpisode(job, { db, cfg, llm });
     default: throw new PermanentError(`Unknown job kind ${(job as JobRow).kind}`);
   }
 }

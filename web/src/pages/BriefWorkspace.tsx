@@ -80,6 +80,14 @@ export function BriefWorkspace() {
     queryFn: async () => (await supabase.from('show_profile_versions').select('version,profile').eq('id', current!.profile_version_id!).maybeSingle()).data as
       { version: number; profile: Record<string, Record<string, unknown>> } | null,
   });
+  const conversation = useQuery({
+    queryKey: ['brief-conversation', b?.episode_map_id, b?.conversation_key],
+    enabled: !!b?.episode_map_id && !!b?.conversation_key,
+    queryFn: async () => {
+      const r = (await supabase.from('episode_maps').select('result').eq('id', b!.episode_map_id!).maybeSingle()).data as { result: { conversations: { key: string; question: string }[] } } | null;
+      return r?.result.conversations.find((c) => c.key === b!.conversation_key)?.question ?? null;
+    },
+  });
   const brandProfile = useQuery({
     queryKey: ['brand-profile-version', current?.brand_profile_version_id],
     enabled: !!current?.brand_profile_version_id,
@@ -169,6 +177,11 @@ export function BriefWorkspace() {
         <div className="flex flex-wrap items-start justify-between gap-4 mt-1">
           <div className="min-w-0 max-w-[80ch]">
             <h1 className="text-[28px] leading-tight font-semibold tracking-[-0.015em]">{draft.title}</h1>
+            {conversation.data && source.data && (
+              <p className="mt-1 text-sm text-ink-soft">
+                Developed from the conversation <Link to="/sources/$sourceId" params={{ sourceId: source.data.id }} className="underline">“{conversation.data}”</Link>
+              </p>
+            )}
             <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-soft">
               <BriefBadge status={b.status} />
               <span>{draft.recommendation === 'research' ? 'Recommendation: research first' : 'Recommendation: proceed'}</span>

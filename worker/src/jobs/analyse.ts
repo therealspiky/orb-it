@@ -68,5 +68,10 @@ export async function runAnalyse(job: JobRow, deps: AnalyseDeps): Promise<Record
   if (!segments.length) throw new PermanentError('Source has no transcript yet');
   await jobProgress(deps.db, job.id, 20, 'Extracting themes, claims and usable moments');
   const { analysis, reused } = await ensureAnalysis(deps.db, deps.cfg, deps.llm, src, segments);
+  // Next: map the episode's conversations (content inventory).
+  await deps.db.from('jobs').upsert({
+    org_id: src.org_id, kind: 'map_episode', payload: { source_id: src.id },
+    idempotency_key: `map:${src.id}:${transcriptFingerprint(segments)}`, created_by: job.created_by,
+  }, { onConflict: 'org_id,idempotency_key', ignoreDuplicates: true });
   return { reused, themes: analysis.themes.length, claims: analysis.claims.length };
 }

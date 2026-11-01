@@ -35,7 +35,7 @@ export interface SourceRow {
 export interface JobRow {
   id: string;
   org_id: string;
-  kind: 'transcribe' | 'analyse' | 'generate_briefs';
+  kind: 'transcribe' | 'analyse' | 'generate_briefs' | 'map_episode';
   payload: Record<string, unknown>;
   attempts: number;
   max_attempts: number;

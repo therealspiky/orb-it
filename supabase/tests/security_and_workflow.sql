@@ -393,4 +393,39 @@ begin
     'edited versions keep the brand profile version they were written against');
 end $$;
 
+-- Episode map ---------------------------------------------------------------------
+insert into episode_maps (org_id, source_id, transcript_fingerprint, model, prompt_version, result)
+select (select v from t_ids where k='org'), (select v from t_ids where k='src_shared'), 'fp', 'm', 'p', '{"conversations":[{"key":"c1"}]}';
+insert into episode_maps (org_id, source_id, transcript_fingerprint, model, prompt_version, result)
+select (select v from t_ids where k='org'), (select v from t_ids where k='src_restricted'), 'fp', 'm', 'p', '{"conversations":[]}';
+insert into t_ids select 'map_shared', id from episode_maps where source_id = (select v from t_ids where k='src_shared');
+insert into t_ids select 'map_restricted', id from episode_maps where source_id = (select v from t_ids where k='src_restricted');
+
+do $$ begin
+  perform pg_temp.ok(pg_temp.count_as('00000000-0000-0000-0000-00000000000b', 'select * from episode_maps') = 1,
+    'Hitz producer sees the map of the shared source only');
+  perform pg_temp.ok(pg_temp.count_as('00000000-0000-0000-0000-00000000000d', 'select * from episode_maps') = 0,
+    'outsider sees no episode maps');
+  perform pg_temp.ok(not pg_temp.fails_as('00000000-0000-0000-0000-00000000000b',
+    format($q$select public.enqueue_job(%L, 'map_episode', %L::jsonb, 'map-1')$q$,
+      (select v from t_ids where k='org'), jsonb_build_object('source_id', (select v from t_ids where k='src_shared')))),
+    'a producer can refresh the map of a source shared with them');
+  perform pg_temp.ok(pg_temp.fails_as('00000000-0000-0000-0000-00000000000e',
+    format($q$select public.enqueue_job(%L, 'map_episode', %L::jsonb, 'map-2')$q$,
+      (select v from t_ids where k='org'), jsonb_build_object('source_id', (select v from t_ids where k='src_shared')))),
+    'a commercial user cannot run editorial jobs');
+  perform pg_temp.ok(not pg_temp.fails_as('00000000-0000-0000-0000-00000000000b',
+    format($q$select public.enqueue_job(%L, 'generate_briefs', %L::jsonb, 'conv-1')$q$,
+      (select v from t_ids where k='org'),
+      jsonb_build_object('source_id', (select v from t_ids where k='src_shared'), 'episode_map_id', (select v from t_ids where k='map_shared'),
+        'conversation_key', 'c1', 'show_ids', jsonb_build_array((select v from t_ids where k='hitz_morning'))))),
+    'developing a mapped conversation for an eligible show is allowed');
+  perform pg_temp.ok(pg_temp.fails_as('00000000-0000-0000-0000-00000000000a',
+    format($q$select public.enqueue_job(%L, 'generate_briefs', %L::jsonb, 'conv-2')$q$,
+      (select v from t_ids where k='org'),
+      jsonb_build_object('source_id', (select v from t_ids where k='src_shared'), 'episode_map_id', (select v from t_ids where k='map_restricted'),
+        'conversation_key', 'c1', 'show_ids', jsonb_build_array((select v from t_ids where k='hitz_morning'))))),
+    'a map from a different source cannot be used');
+end $$;
+
 \echo 'database tests complete'
