@@ -1,6 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { check, supabase } from './supabase';
 import type { Brand, Membership, Organisation, Role, Show } from './types';
 
@@ -32,9 +32,22 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     try { return localStorage.getItem(ORG_KEY); } catch { return null; }
   });
 
+  const currentUser = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => { setSession(data.session); setAuthLoading(false); });
-    const { data } = supabase.auth.onAuthStateChange((_e, s) => { setSession(s); qc.clear(); });
+    supabase.auth.getSession().then(({ data }) => {
+      currentUser.current = data.session?.user.id ?? null;
+      setSession(data.session);
+      setAuthLoading(false);
+    });
+    // Supabase re-validates the session when the tab regains focus and refreshes tokens
+    // in the background. Those events must not reset the app (it would unmount open
+    // forms); cached data is only cleared when a different user signs in or out.
+    const { data } = supabase.auth.onAuthStateChange((_e, s) => {
+      const next = s?.user.id ?? null;
+      if (currentUser.current !== undefined && next !== currentUser.current) qc.clear();
+      currentUser.current = next;
+      setSession((prev) => (prev?.access_token === s?.access_token && prev?.user.id === s?.user.id ? prev : s));
+    });
     return () => data.subscription.unsubscribe();
   }, [qc]);
 
