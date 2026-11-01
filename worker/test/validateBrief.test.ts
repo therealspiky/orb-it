@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { validateBrief, normaliseForMatch } from '../src/lib/validateBrief.js';
 import { BriefSchema, toolSchema } from '../src/lib/schemas.js';
 import { buildBriefRows, profileSlot, sourceUsableFor } from '../src/jobs/generateBriefs.js';
+import { briefUserPrompt } from '../src/lib/prompts.js';
 import { makeBrief, segments, source } from './fixtures.js';
 
 const slot = { episodeLengthMinutes: 45 };
@@ -112,14 +113,15 @@ describe('schemas and row building', () => {
     const v = validateBrief(makeBrief(), segments, source, slot);
     const rows = buildBriefRows({
       brief: v.brief, evidence: v.evidence, validation: v.report, src: source,
-      show: { id: 'show-hitz', org_id: 'org', brand_id: 'brand-hitz', name: 'Hitz Morning', archived_at: null, current_profile_version_id: 'pv', brands: { name: 'Hitz FM' } },
-      profileVersionId: 'pv', group: 'g', model: 'claude-sonnet-5-5', createdBy: null,
+      show: { id: 'show-hitz', org_id: 'org', brand_id: 'brand-hitz', name: 'Hitz Morning', archived_at: null, current_profile_version_id: 'pv', brands: { name: 'Hitz FM', current_profile_version_id: 'bpv' } },
+      profileVersionId: 'pv', brandProfileVersionId: 'bpv', group: 'g', model: 'claude-sonnet-5-5', createdBy: null,
     });
     expect(rows.version.brief_id).toBe(rows.brief.id);
     expect(rows.evidence.every((e) => e.brief_version_id === rows.version.id)).toBe(true);
     expect((rows.version.content.social_package as { render_state: string }[]).every((a) => a.render_state === 'planned')).toBe(true);
     expect(rows.tasks.filter((t) => t.origin === 'unresolved').every((t) => t.blocking)).toBe(true);
     expect(rows.brief.status).toBe('drafted');
+    expect(rows.version.brand_profile_version_id).toBe('bpv');
   });
 
   it('enforces source sharing scope at execution time', () => {
@@ -127,6 +129,20 @@ describe('schemas and row building', () => {
     expect(sourceUsableFor({ share_scope: 'organisation', brand_id: 'brand-joy', show_id: 'show-tys' }, hitz)).toBe(true);
     expect(sourceUsableFor({ share_scope: 'brand', brand_id: 'brand-joy', show_id: 'show-tys' }, hitz)).toBe(false);
     expect(sourceUsableFor({ share_scope: 'show', brand_id: 'brand-hitz', show_id: 'show-other' }, hitz)).toBe(false);
+  });
+
+  it('applies a brand-level Twi setting to every show', () => {
+    expect(profileSlot({}, { language: { twi_beta: true } }).twiBeta).toBe(true);
+  });
+
+  it('puts the approved brand profile in the prompt, or asks for one when missing', () => {
+    const base = { showName: 'Morning Show', brandName: 'Joy FM', profile: {}, profileVersion: 1, priorCoverage: [], siblingTreatments: [],
+      analysis: { summary: '', themes: [], claims: [], questions_raised: [], usable_moments: [], sensitivities: [] } };
+    const withBrand = briefUserPrompt({ ...base, brandProfile: { identity: { positioning: 'Trusted news and talk' } }, brandProfileVersion: 3 });
+    expect(withBrand).toContain('APPROVED BRAND PROFILE for Joy FM (version 3)');
+    expect(withBrand).toContain('Trusted news and talk');
+    const without = briefUserPrompt({ ...base, brandProfile: null, brandProfileVersion: null });
+    expect(without).toContain('has no approved brand profile');
   });
 
   it('reads slot length from the approved profile', () => {

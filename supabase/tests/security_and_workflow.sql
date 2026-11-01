@@ -352,4 +352,45 @@ do $$ begin
     'decisions are written to the audit log');
 end $$;
 
+-- Brand profiles -----------------------------------------------------------------
+do $$
+declare bp uuid; v3 uuid;
+begin
+  perform pg_temp.ok(pg_temp.fails_as('00000000-0000-0000-0000-00000000000b',
+    format($q$select public.create_brand_profile_draft(%L, '{}'::jsonb)$q$, (select v from t_ids where k='hitz'))),
+    'show-scoped producer cannot draft the brand profile');
+
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', true);
+  execute 'set local role authenticated';
+  bp := public.create_brand_profile_draft((select v from t_ids where k='hitz'),
+          '{"identity":{"positioning":"Youthful urban hits and talk"}}'::jsonb, 'first');
+  execute 'reset role';
+
+  perform pg_temp.ok(pg_temp.fails_as('00000000-0000-0000-0000-00000000000a',
+    format($q$update brands set current_profile_version_id=%L where id=%L$q$, bp, (select v from t_ids where k='hitz'))),
+    'a draft cannot be made current by editing the brand directly');
+  perform pg_temp.ok(pg_temp.fails_as('00000000-0000-0000-0000-00000000000c',
+    format('select public.approve_brand_profile(%L)', bp)),
+    'a show editor cannot approve a brand profile');
+  perform pg_temp.ok(not pg_temp.fails_as('00000000-0000-0000-0000-00000000000a',
+    format('select public.approve_brand_profile(%L)', bp)),
+    'organisation admin approves the brand profile');
+  perform pg_temp.ok((select current_profile_version_id from brands where id=(select v from t_ids where k='hitz')) = bp,
+    'approved brand profile becomes current');
+  perform pg_temp.ok(pg_temp.count_as('00000000-0000-0000-0000-00000000000b', 'select * from brand_profile_versions') = 1,
+    'members can read brand profiles');
+  perform pg_temp.ok(pg_temp.fails_as('00000000-0000-0000-0000-00000000000a',
+    format($q$update shows set current_profile_version_id=null where id=%L$q$, (select v from t_ids where k='hitz_morning'))),
+    'show profile pointer is also protected');
+
+  update brief_versions set brand_profile_version_id = bp where id = (select v from t_ids where k='v2');
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000b', true);
+  execute 'set local role authenticated';
+  v3 := public.save_brief_version((select v from t_ids where k='brief'), (select v from t_ids where k='v2'),
+          '{"title":"Revised after correction"}'::jsonb, '{}', 'post-correction');
+  execute 'reset role';
+  perform pg_temp.ok((select brand_profile_version_id from brief_versions where id = v3) = bp,
+    'edited versions keep the brand profile version they were written against');
+end $$;
+
 \echo 'database tests complete'

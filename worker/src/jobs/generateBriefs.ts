@@ -13,7 +13,7 @@ export interface GenerateDeps { db: Db; cfg: Config; llm: LlmClient }
 interface ShowRow {
   id: string; org_id: string; brand_id: string; name: string; archived_at: string | null;
   current_profile_version_id: string | null;
-  brands: { name: string } | null;
+  brands: { name: string; current_profile_version_id: string | null } | null;
 }
 
 /** Same cross-brand sharing rule as enqueue_job(), re-checked at execution time. */
@@ -23,21 +23,23 @@ export function sourceUsableFor(src: Pick<SourceRow, 'share_scope' | 'brand_id' 
   return src.show_id === show.id || (src.show_id === null && src.brand_id === show.brand_id);
 }
 
-export function profileSlot(profile: Record<string, any>) {
+export function profileSlot(profile: Record<string, any>, brandProfile?: Record<string, any> | null) {
   const voice = profile?.voice ?? {};
   const lang = profile?.language ?? {};
+  const brandLang = brandProfile?.language ?? {};
   const len = Number(voice.episode_length_minutes);
   return {
     episodeLengthMinutes: Number.isFinite(len) && len > 0 ? len : undefined,
     breaksMinutes: Number(voice.breaks_minutes) || 0,
-    twiBeta: Boolean(lang.twi_beta),
+    twiBeta: Boolean(lang.twi_beta) || Boolean(brandLang.twi_beta),
   };
 }
 
 /** Rows to insert for one validated brief. Pure, so it can be unit-tested. */
 export function buildBriefRows(args: {
   brief: Brief; evidence: EvidenceRow[]; validation: unknown;
-  src: SourceRow; show: ShowRow; profileVersionId: string; group: string; model: string; createdBy: string | null;
+  src: SourceRow; show: ShowRow; profileVersionId: string; brandProfileVersionId: string | null;
+  group: string; model: string; createdBy: string | null;
 }) {
   const { brief, evidence, src, show } = args;
   const briefId = randomUUID();
@@ -67,7 +69,8 @@ export function buildBriefRows(args: {
     briefSource: { brief_id: briefId, source_id: src.id, org_id: src.org_id },
     version: {
       id: versionId, org_id: show.org_id, brand_id: show.brand_id, show_id: show.id, brief_id: briefId, version: 1,
-      content, profile_version_id: args.profileVersionId, generated: true, model: args.model,
+      content, profile_version_id: args.profileVersionId, brand_profile_version_id: args.brandProfileVersionId,
+      generated: true, model: args.model,
       prompt_version: BRIEF_PROMPT_VERSION, validation: args.validation, created_by: args.createdBy,
       change_note: 'Generated from source',
     },
@@ -91,7 +94,7 @@ export async function runGenerateBriefs(job: JobRow, deps: GenerateDeps): Promis
   const { analysis } = await ensureAnalysis(db, cfg, llm, src, segments);
 
   const transcriptBlock = `SOURCE\n${describeSource(src)}\n\nTRANSCRIPT (cite by [segment number])\n${renderTranscript(segments, src.timestamps_genuine)}`;
-  const shows = must(await db.from('shows').select('id,org_id,brand_id,name,archived_at,current_profile_version_id,brands(name)')
+  const shows = must(await db.from('shows').select('id,org_id,brand_id,name,archived_at,current_profile_version_id,brands(name,current_profile_version_id)')
     .in('id', showIds), 'load shows') as unknown as ShowRow[];
 
   // Retries resume: briefs already created for this group are kept and fed in as siblings.
@@ -120,6 +123,14 @@ export async function runGenerateBriefs(job: JobRow, deps: GenerateDeps): Promis
       .eq('id', show.current_profile_version_id).single(), 'load profile') as { id: string; version: number; profile: any; status: string };
     if (pv.status !== 'approved') { skipped.push({ show: show.name, reason: 'profile not approved' }); continue; }
 
+    // Brand profile: applied when approved; its absence is recorded as unresolved, not guessed.
+    const bpvId = show.brands?.current_profile_version_id ?? null;
+    const bpvRow = bpvId
+      ? (await db.from('brand_profile_versions').select('id,version,profile,status').eq('id', bpvId).maybeSingle()).data as
+          { id: string; version: number; profile: any; status: string } | null
+      : null;
+    const bpv = bpvRow?.status === 'approved' ? bpvRow : null;
+
     const prior = must(await db.from('briefs').select('title,status,status_reason').eq('show_id', show.id)
       .order('created_at', { ascending: false }).limit(20), 'load coverage') as { title: string; status: string; status_reason: string | null }[];
 
@@ -130,6 +141,7 @@ export async function runGenerateBriefs(job: JobRow, deps: GenerateDeps): Promis
       cachedContext: transcriptBlock,
       user: briefUserPrompt({
         showName: show.name, brandName: show.brands?.name ?? '', profile: pv.profile, profileVersion: pv.version,
+        brandProfile: bpv?.profile ?? null, brandProfileVersion: bpv?.version ?? null,
         analysis, priorCoverage: prior.map((p) => ({ title: p.title, status: p.status, reason: p.status_reason })),
         siblingTreatments: siblings,
       }),
@@ -139,10 +151,14 @@ export async function runGenerateBriefs(job: JobRow, deps: GenerateDeps): Promis
       maxTokens: 16000,
     });
 
-    const v = validateBrief(res.value, segments, src, profileSlot(pv.profile));
+    const v = validateBrief(res.value, segments, src, profileSlot(pv.profile, bpv?.profile));
+    if (!bpv && !v.brief.unresolved.some((u) => /brand profile/i.test(u.field))) {
+      v.brief.unresolved.push({ field: 'brand profile', reason: `${show.brands?.name ?? 'This brand'} has no approved brand profile, so station-wide identity and standards were not applied.`,
+        next_action: 'Approve a brand profile, then review this brief against it.', owner_role: 'brand_editor' });
+    }
     const rows = buildBriefRows({
       brief: v.brief, evidence: v.evidence, validation: { ...v.report, usage: res.usage },
-      src, show, profileVersionId: pv.id, group, model: res.model, createdBy: job.created_by,
+      src, show, profileVersionId: pv.id, brandProfileVersionId: bpv?.id ?? null, group, model: res.model, createdBy: job.created_by,
     });
     must(await db.from('briefs').insert(rows.brief).select('id').single(), 'insert brief');
     must(await db.from('brief_sources').insert(rows.briefSource).select('brief_id'), 'insert brief source');

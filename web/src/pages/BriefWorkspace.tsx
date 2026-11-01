@@ -80,6 +80,12 @@ export function BriefWorkspace() {
     queryFn: async () => (await supabase.from('show_profile_versions').select('version,profile').eq('id', current!.profile_version_id!).maybeSingle()).data as
       { version: number; profile: Record<string, Record<string, unknown>> } | null,
   });
+  const brandProfile = useQuery({
+    queryKey: ['brand-profile-version', current?.brand_profile_version_id],
+    enabled: !!current?.brand_profile_version_id,
+    queryFn: async () => (await supabase.from('brand_profile_versions').select('version').eq('id', current!.brand_profile_version_id!).maybeSingle()).data as
+      { version: number } | null,
+  });
   const tasks = useQuery({
     queryKey: ['tasks', briefId],
     queryFn: async () => check(await supabase.from('research_tasks').select('*').eq('brief_id', briefId).order('created_at')) as Task[],
@@ -167,6 +173,9 @@ export function BriefWorkspace() {
               <BriefBadge status={b.status} />
               <span>{draft.recommendation === 'research' ? 'Recommendation: research first' : 'Recommendation: proceed'}</span>
               <span>Version {current.version}, {current.generated ? `drafted by ${current.model}` : `edited by ${person(current.created_by)}`} {ago(current.created_at)}</span>
+              {current.brand_profile_version_id
+                ? <Link to="/brands/$brandId" params={{ brandId: b.brand_id }} className="underline">Brand profile{brandProfile.data ? ` v${brandProfile.data.version}` : ''}</Link>
+                : <Link to="/brands/$brandId" params={{ brandId: b.brand_id }} className="underline text-signal">No brand profile applied</Link>}
               {profile.data && <Link to="/shows/$showId" params={{ showId: b.show_id }} className="underline">Show profile v{profile.data.version}</Link>}
               {source.data && <Link to="/sources/$sourceId" params={{ sourceId: source.data.id }} className="underline">Source</Link>}
             </p>

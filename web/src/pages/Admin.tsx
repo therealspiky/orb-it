@@ -54,7 +54,7 @@ export function AdminPage() {
   return (
     <>
       <PageHeader title={org!.name}
-        lede="Brands own shows. Every show needs an approved editorial profile before Orb.IT will write briefs for it." />
+        lede="Brands own shows. Profile each brand (the station-wide identity and standards) and each show (its remit, tone and format); briefs are written against both." />
 
       <section className="mb-12">
         <h2 className="text-lg font-semibold mb-3">Brands and shows</h2>
@@ -66,7 +66,15 @@ export function AdminPage() {
             return (
               <div key={b.id} className={`panel p-5 ${b.archived_at ? 'opacity-60' : ''}`}>
                 <div className="flex items-baseline justify-between gap-3">
-                  <h3 className="text-[17px] font-semibold">{b.name}{b.archived_at && ' (archived)'}</h3>
+                  <div>
+                    <h3 className="text-[17px] font-semibold">
+                      <Link to="/brands/$brandId" params={{ brandId: b.id }} className="hover:underline">{b.name}</Link>{b.archived_at && ' (archived)'}
+                    </h3>
+                    <Link to="/brands/$brandId" params={{ brandId: b.id }}
+                      className={`text-[12px] font-semibold ${b.current_profile_version_id ? 'text-verified' : 'text-signal'}`}>
+                      {b.current_profile_version_id ? 'Brand profile approved' : 'Brand profile needed'}
+                    </Link>
+                  </div>
                   {canBrand && (
                     <button className="text-sm text-ink-soft underline" onClick={() => archive.mutate({ table: 'brands', id: b.id, archived: !!b.archived_at })}>
                       {b.archived_at ? 'Restore' : 'Archive'}

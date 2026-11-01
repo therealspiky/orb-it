@@ -9,6 +9,7 @@ acceptance test is passed until the pilot runs it on fresh sources with real key
 | Spec area | What exists |
 |---|---|
 | §3 Hierarchy and roles | Organisation > brand > show; nine roles scoped to org, brand or show; enforced in Postgres RLS and workflow functions, not the UI. Archive/restore. |
+| §3/§4 Brand profiles | Station-wide profile (identity, voice, language, standards and exclusions, rights, commercial context, examples), versioned with brand-editor approval. Briefs are written against the approved brand and show profiles and record both versions; a missing brand profile is recorded as an unresolved item, never guessed. |
 | §4 Show profiles | Guided profile covering identity, voice/format, language, boundaries, production, commercial, examples. Versioned drafts, editor approval, side-by-side comparison. Briefs record the profile version used; generation refuses shows without an approved profile. |
 | §5 Ingestion and evidence | Upload with SHA-256 fingerprint, duplicate refusal, immutable originals, worker re-verification, ffprobe validation, chunked transcription with genuine timestamps, uncertainty flags, pasted transcripts/notes (no invented times), versioned corrections that reset dependent evidence. Explicit queued / processing / needs review / ready / failed states; retry of an interrupted upload. |
 | §7 Cross-brand intelligence (core) | One source, several destination shows in one run; each brief sees sister treatments so it must differ. Source sharing scope (show / brand / organisation) enforced at enqueue and again at execution. |

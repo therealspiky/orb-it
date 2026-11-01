@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute, createRouter, Outlet } from '@tanstack/react-router';
 import { Layout } from './components/Layout';
 import { AdminPage } from './pages/Admin';
+import { BrandProfilePage } from './pages/BrandProfile';
 import { BriefsPage } from './pages/Briefs';
 import { BriefWorkspace } from './pages/BriefWorkspace';
 import { HomePage } from './pages/Home';
@@ -17,6 +18,7 @@ const app = createRoute({ getParentRoute: () => root, id: 'app', component: Layo
 
 const home = createRoute({ getParentRoute: () => app, path: '/', component: HomePage });
 const admin = createRoute({ getParentRoute: () => app, path: '/admin', component: AdminPage });
+const brandProfile = createRoute({ getParentRoute: () => app, path: '/brands/$brandId', component: BrandProfilePage });
 const showProfile = createRoute({ getParentRoute: () => app, path: '/shows/$showId', component: ShowProfilePage });
 const sources = createRoute({ getParentRoute: () => app, path: '/sources', component: SourcesPage });
 const sourceDetail = createRoute({ getParentRoute: () => app, path: '/sources/$sourceId', component: SourceDetailPage });
@@ -26,7 +28,7 @@ const reviews = createRoute({ getParentRoute: () => app, path: '/reviews', compo
 
 const routeTree = root.addChildren([
   login, onboarding,
-  app.addChildren([home, admin, showProfile, sources, sourceDetail, briefs, brief, reviews]),
+  app.addChildren([home, admin, brandProfile, showProfile, sources, sourceDetail, briefs, brief, reviews]),
 ]);
 
 export const router = createRouter({ routeTree, defaultPreload: 'intent' });

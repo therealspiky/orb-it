@@ -246,6 +246,11 @@ function GenerateBriefs({ source, disabled, uncertain, onQueued }: { source: Sou
     <div className="panel p-4">
       <h2 className="font-semibold">Develop briefs</h2>
       <p className="text-sm text-ink-soft mt-0.5 mb-3">Pick the shows to write for. Each gets its own treatment, built from its approved profile.</p>
+      {eligible.some((sh) => !brands.find((b) => b.id === sh.brand_id)?.current_profile_version_id) && (
+        <p className="text-[13px] text-ink mb-3 bg-signal-soft rounded px-2 py-1">
+          Some brands have no approved brand profile. Their briefs will not reflect station-wide identity and standards until one is approved.
+        </p>
+      )}
       {uncertain > 0 && <p className="text-[13px] text-ink mb-3 bg-signal-soft rounded px-2 py-1">{uncertain} uncertain passage{uncertain === 1 ? '' : 's'}: correct the important ones first for better evidence.</p>}
       {eligible.length === 0 ? <p className="text-sm text-ink-faint">No shows you can work on can use this source under its sharing setting.</p> : (
         <ul className="space-y-1.5 mb-3">
@@ -254,7 +259,7 @@ function GenerateBriefs({ source, disabled, uncertain, onQueued }: { source: Sou
               <label className={`flex items-start gap-2 text-sm ${sh.current_profile_version_id ? '' : 'text-ink-faint'}`}>
                 <input type="checkbox" className="mt-1" disabled={!sh.current_profile_version_id} checked={picked.includes(sh.id)}
                   onChange={(e) => setPicked(e.target.checked ? [...picked, sh.id] : picked.filter((x) => x !== sh.id))} />
-                <span>{sh.name} <span className="text-ink-faint">· {brands.find((b) => b.id === sh.brand_id)?.name}</span>
+                <span>{sh.name} <span className="text-ink-faint">· {brands.find((b) => b.id === sh.brand_id)?.name}{brands.find((b) => b.id === sh.brand_id)?.current_profile_version_id ? '' : ' (no brand profile)'}</span>
                   {!sh.current_profile_version_id && <Link to="/shows/$showId" params={{ showId: sh.id }} className="block underline">Approve a profile first</Link>}
                 </span>
               </label>

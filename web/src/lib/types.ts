@@ -20,7 +20,10 @@ export const REVIEWER_ROLES: Role[] = [...EDITOR_ROLES, 'producer', 'researcher'
 
 export interface Organisation { id: string; name: string }
 export interface Membership { id: string; org_id: string; user_id: string; role: Role; brand_id: string | null; show_id: string | null }
-export interface Brand { id: string; org_id: string; name: string; description: string | null; languages: string[]; archived_at: string | null }
+export interface Brand {
+  id: string; org_id: string; name: string; description: string | null; languages: string[]; archived_at: string | null;
+  current_profile_version_id: string | null;
+}
 export interface Show {
   id: string; org_id: string; brand_id: string; name: string; description: string | null;
   current_profile_version_id: string | null; archived_at: string | null;
@@ -66,7 +69,7 @@ export interface Brief {
 }
 export interface BriefVersion {
   id: string; brief_id: string; version: number; content: BriefContent; locked_sections: string[];
-  profile_version_id: string | null; generated: boolean; model: string | null; prompt_version: string | null;
+  profile_version_id: string | null; brand_profile_version_id: string | null; generated: boolean; model: string | null; prompt_version: string | null;
   validation: { checks?: { name: string; status: 'ok' | 'warn' | 'fail'; detail: string }[] };
   change_note: string | null; created_by: string | null; created_at: string;
 }

@@ -54,8 +54,11 @@ export const BRIEF_SYSTEM = `You are Orb.IT's editorial strategist. You develop 
 opportunity brief for ONE destination show, working alongside its producer. The brief must let the producer identify the angle,
 verify its basis, prepare the rundown, pursue guests, assign tasks and see blockers without opening another tool.
 
-The approved show profile is the editorial contract. Fit must be explained against specific profile fields
-(audience need, segment format, tone, duration, novelty). If a needed profile field is missing, say so in "unresolved".
+The approved brand (station/channel) profile and show profile are the editorial contract. The brand profile sets the
+station's identity, audience, voice, languages and brand-wide standards and exclusions; the show profile sets the
+programme's remit, tone and format inside that. Fit must be explained against specific fields of both, using field names
+prefixed "brand." or "show." (for example brand.identity.positioning, show.voice.tone). If a needed field is missing,
+say so in "unresolved".
 The treatment must offer a NEW contribution suited to this show — not a rerun of the source with a new name — and must be
 clearly distinct from any treatments already proposed for other shows (listed below).
 
@@ -80,6 +83,8 @@ export interface BriefContext {
   brandName: string;
   profile: unknown;
   profileVersion: number;
+  brandProfile: unknown | null;
+  brandProfileVersion: number | null;
   analysis: Analysis;
   priorCoverage: { title: string; status: string; reason: string | null }[];
   siblingTreatments: { show: string; title: string; premise: string }[];
@@ -92,7 +97,15 @@ export function briefUserPrompt(ctx: BriefContext): string {
   const siblings = ctx.siblingTreatments.length
     ? ctx.siblingTreatments.map((s) => `- ${s.show}: "${s.title}" — ${s.premise}`).join('\n')
     : '- None yet';
+  const brand = ctx.brandProfile
+    ? `APPROVED BRAND PROFILE for ${ctx.brandName} (version ${ctx.brandProfileVersion}). Brand identity, standards and exclusions
+bind every show of this brand; the show profile refines tone and format within them. Never breach a brand exclusion.
+${JSON.stringify(ctx.brandProfile, null, 2)}`
+    : `BRAND PROFILE: ${ctx.brandName} has no approved brand profile. Do not guess the station's identity or standards;
+list "brand profile" in unresolved with owner_role brand_editor.`;
   return `DESTINATION: ${ctx.showName} (${ctx.brandName})
+${brand}
+
 APPROVED SHOW PROFILE (version ${ctx.profileVersion}):
 ${JSON.stringify(ctx.profile, null, 2)}
 
