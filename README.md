@@ -66,6 +66,18 @@ npm install
 npm start                          # needs ffmpeg on PATH
 ```
 
+On Windows (Command Prompt):
+
+```bat
+cd worker
+copy .env.example .env
+notepad .env
+winget install Gyan.FFmpeg
+rem open a NEW terminal so ffmpeg is on PATH, then:
+npm install
+npm start
+```
+
 Or build the container: `docker build -t orbit-worker worker/` and run it with the same environment
 on any host that keeps a process running (a VPS, Railway, Fly.io, Render, or your Mac during development).
 Run more than one worker for throughput; jobs are claimed with `SKIP LOCKED`.

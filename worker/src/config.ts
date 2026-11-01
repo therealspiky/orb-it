@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { hostname } from 'node:os';
 
 function req(name: string): string {
@@ -25,7 +26,16 @@ export interface Config {
   chunkSeconds: number;
 }
 
+/** Loads worker/.env if present (real environment variables take precedence). */
+function loadDotEnv() {
+  if (!existsSync('.env')) return;
+  const before = { ...process.env };
+  process.loadEnvFile('.env');
+  for (const [k, v] of Object.entries(before)) if (v !== undefined) process.env[k] = v;
+}
+
 export function loadConfig(): Config {
+  loadDotEnv();
   const transcribeProvider = (process.env.TRANSCRIBE_PROVIDER ?? 'openai') as TranscribeProvider;
   if (!['openai', 'deepgram'].includes(transcribeProvider)) {
     throw new Error(`TRANSCRIBE_PROVIDER must be openai or deepgram, got ${transcribeProvider}`);
