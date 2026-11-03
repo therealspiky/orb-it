@@ -39,9 +39,16 @@ docs/      Architecture and status
    is clear. Any edit creates a new version and withdraws earlier checks and approval.
 7. **Export.** Markdown or JSON, including evidence, verification state, uncertainty and review decisions.
 
+## Instances and modules
+
+Orb.IT is deployed per client: each media organisation gets its own instance (own Supabase project,
+worker and web address) serving that one organisation. Features beyond the core are modules that are
+licensed per instance and can be switched off or removed from the build.
+See [docs/DEPLOY-INSTANCE.md](docs/DEPLOY-INSTANCE.md) and [docs/MODULES.md](docs/MODULES.md).
+
 ## Setup
 
-You need a Supabase project, an Anthropic API key, and an OpenAI or Deepgram key.
+You need a Supabase project and an Anthropic API key; an OpenAI or Deepgram key only if recordings are transcribed.
 
 ### 1. Database
 
@@ -106,7 +113,7 @@ Paste a YouTube link in Add source to fill in the video's details; connect your 
 
 ### 4. First run
 
-1. Create an account and your organisation. You become its administrator.
+1. The first person to sign up names the organisation and becomes its administrator (once per instance).
 2. Add brands and shows. Ask colleagues to sign up, then add them with a role and scope.
 3. Fill in and approve each show's profile (episode length, tone, audience, boundaries).
 4. Add a recording, wait for the transcript, correct uncertain passages.
@@ -115,13 +122,13 @@ Paste a YouTube link in Add source to fill in the video's details; connect your 
 ## Tests
 
 ```bash
-supabase/tests/run.sh              # 45 database checks on a throwaway PostgreSQL 16
-cd worker && npm test              # 31 tests: validation, parsing, provider mapping, ffmpeg pipeline
+supabase/tests/run.sh              # 84 database checks on a throwaway PostgreSQL 16
+cd worker && npm test              # 77 tests: validation, parsing, map, YouTube, module boundaries
 cd web && npm run build            # typecheck + production build
 ```
 
 The database suite covers tenant isolation, scoped roles, source sharing scope, immutable source
-fingerprints, idempotent jobs, version-bound approval, and approval withdrawal after edits and source corrections.
+fingerprints, idempotent jobs, version-bound approval, and approval withdrawal after edits and source corrections, one organisation per instance, and module licensing.
 
 ## Costs (planning figures, October 2026 list prices)
 

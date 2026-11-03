@@ -2,7 +2,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useState, type FormEvent } from 'react';
 import { Empty, ErrorNote, Field, PageHeader } from '../components/ui';
-import { YouTubeChannels } from '../components/YouTubeChannels';
+import { Slot, useModules } from '../modules/runtime';
 import { useOrg, usePeople } from '../lib/org';
 import { check, supabase } from '../lib/supabase';
 import { ROLE_LABEL, type Membership, type Role } from '../lib/types';
@@ -55,7 +55,7 @@ export function AdminPage() {
   return (
     <>
       <PageHeader title={org!.name}
-        lede="Brands own shows. Profile each brand (the station-wide identity and standards) and each show (its remit, tone and format); briefs are written against both." />
+        lede="Brands own shows. Every show needs an approved editorial profile before Orb.IT writes briefs for it." />
 
       <section className="mb-12">
         <h2 className="text-lg font-semibold mb-3">Brands and shows</h2>
@@ -68,13 +68,8 @@ export function AdminPage() {
               <div key={b.id} className={`panel p-5 ${b.archived_at ? 'opacity-60' : ''}`}>
                 <div className="flex items-baseline justify-between gap-3">
                   <div>
-                    <h3 className="text-[17px] font-semibold">
-                      <Link to="/brands/$brandId" params={{ brandId: b.id }} className="hover:underline">{b.name}</Link>{b.archived_at && ' (archived)'}
-                    </h3>
-                    <Link to="/brands/$brandId" params={{ brandId: b.id }}
-                      className={`text-[12px] font-semibold ${b.current_profile_version_id ? 'text-verified' : 'text-signal'}`}>
-                      {b.current_profile_version_id ? 'Brand profile approved' : 'Brand profile needed'}
-                    </Link>
+                    <h3 className="text-[17px] font-semibold">{b.name}{b.archived_at && ' (archived)'}</h3>
+                    <Slot name="admin.brandStatus" brand={b} />
                   </div>
                   {canBrand && (
                     <button className="text-sm text-ink-soft underline" onClick={() => archive.mutate({ table: 'brands', id: b.id, archived: !!b.archived_at })}>
@@ -118,7 +113,9 @@ export function AdminPage() {
         <ErrorNote error={addBrand.error} />
       </section>
 
-      <YouTubeChannels />
+      <Slot name="admin.sections" />
+
+      <InstanceModules />
 
       <section>
         <h2 className="text-lg font-semibold mb-1">People and roles</h2>
@@ -173,5 +170,26 @@ export function AdminPage() {
         <div className="mt-2"><ErrorNote error={addMember.error} /></div>
       </section>
     </>
+  );
+}
+
+/** Read-only list of the modules licensed on this instance (changed by the vendor, not in the app). */
+function InstanceModules() {
+  const { rows, isEnabled } = useModules();
+  const { can } = useOrg();
+  if (!can(['org_admin']) || !rows.length) return null;
+  return (
+    <section className="mb-12">
+      <h2 className="text-lg font-semibold mb-1">Modules on this instance</h2>
+      <p className="text-ink-soft mb-3 max-w-[75ch]">Included in your Orb.IT subscription. To add or remove a module, contact ctrl.IT.</p>
+      <ul className="flex flex-wrap gap-2">
+        <li className="text-sm rounded-md border border-line px-3 py-1.5 bg-surface"><span className="font-semibold">Core</span> <span className="text-verified">on</span></li>
+        {rows.map((r) => (
+          <li key={r.key} className="text-sm rounded-md border border-line px-3 py-1.5 bg-surface">
+            <span className="font-semibold">{r.label}</span> <span className={isEnabled(r.key) ? 'text-verified' : 'text-ink-faint'}>{isEnabled(r.key) ? 'on' : 'off'}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

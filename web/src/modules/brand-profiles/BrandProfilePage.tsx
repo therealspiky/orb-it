@@ -1,12 +1,12 @@
 import { Link, useParams } from '@tanstack/react-router';
-import { ProfileEditor } from '../components/ProfileEditor';
-import { Spinner } from '../components/ui';
-import { useOrg } from '../lib/org';
-import { BRAND_PROFILE_GROUPS } from '../lib/profileFields';
-import { WORK_ROLES } from '../lib/types';
+import { ProfileEditor } from '../../components/ProfileEditor';
+import { Spinner } from '../../components/ui';
+import { useOrg } from '../../lib/org';
+import { BRAND_PROFILE_GROUPS } from '../../lib/profileFields';
+import { WORK_ROLES } from '../../lib/types';
 
 export function BrandProfilePage() {
-  const { brandId } = useParams({ from: '/app/brands/$brandId' });
+  const { brandId } = useParams({ strict: false }) as { brandId: string };
   const { brands, shows, can } = useOrg();
   const brand = brands.find((b) => b.id === brandId);
   if (!brand) return <Spinner />;

@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
-import { ErrorNote, PageHeader, Spinner } from '../components/ui';
-import { useOrg } from '../lib/org';
-import { check, supabase } from '../lib/supabase';
-import type { Job } from '../lib/types';
-import { checkState, YT_REDIRECT_PATH } from '../lib/youtube';
+import { ErrorNote, PageHeader, Spinner } from '../../components/ui';
+import { useOrg } from '../../lib/org';
+import { check, supabase } from '../../lib/supabase';
+import type { Job } from '../../lib/types';
+import { checkState, YT_REDIRECT_PATH } from './youtube';
 
 /** Google sends the user back here; the one-time code is handed to the worker. */
 export function YouTubeCallbackPage() {

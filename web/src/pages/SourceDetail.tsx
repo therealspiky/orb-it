@@ -1,14 +1,14 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link, useParams } from '@tanstack/react-router';
 import { Pencil, Play } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { BriefBadge, Empty, ErrorNote, PageHeader, Progress, SourceBadge, Spinner } from '../components/ui';
 import { safeName, sha256 } from '../lib/checksum';
 import { ago, bytes, clock, LANGUAGE_LABEL } from '../lib/format';
 import { useOrg } from '../lib/org';
 import { check, supabase } from '../lib/supabase';
-import { WORK_ROLES, type Brief, type EpisodeMapRow, type Job, type Segment, type Source } from '../lib/types';
-import { EpisodeMap } from '../components/EpisodeMap';
+import { WORK_ROLES, type Brief, type Job, type Segment, type Source } from '../lib/types';
+import { Slot, useModules } from '../modules/runtime';
 
 interface Analysis {
   summary: string;
@@ -24,6 +24,7 @@ export function SourceDetailPage() {
   const mediaRef = useRef<HTMLVideoElement>(null);
   const [activeIdx, setActiveIdx] = useState<number | null>(null);
   const [onlyUncertain, setOnlyUncertain] = useState(false);
+  const [moduleView, setModuleView] = useState(false);
 
   const source = useQuery({
     queryKey: ['source', sourceId],
@@ -54,12 +55,6 @@ export function SourceDetailPage() {
     queryKey: ['source-briefs', sourceId, jobs.data?.[0]?.status],
     queryFn: async () => check(await supabase.from('briefs').select('*').eq('origin_source_id', sourceId).order('created_at', { ascending: false })) as Brief[],
   });
-  const map = useQuery({
-    queryKey: ['episode-map', sourceId, jobs.data?.find((j) => j.kind === 'map_episode')?.status],
-    enabled: !!s,
-    queryFn: async () => (await supabase.from('episode_maps').select('*').eq('source_id', sourceId)
-      .order('created_at', { ascending: false }).limit(1).maybeSingle()).data as EpisodeMapRow | null,
-  });
   const mediaUrl = useQuery({
     queryKey: ['media-url', s?.storage_path],
     enabled: !!s?.storage_path && s.kind === 'recording',
@@ -70,9 +65,9 @@ export function SourceDetailPage() {
   const canEdit = s ? can(WORK_ROLES, s.brand_id, s.show_id) : false;
   const visible = useMemo(() => (segments.data ?? []).filter((x) => !onlyUncertain || x.is_uncertain), [segments.data, onlyUncertain]);
   const uncertainCount = (segments.data ?? []).filter((x) => x.is_uncertain).length;
-  const activeJob = jobs.data?.find((j) => ['queued', 'running'].includes(j.status) && j.kind !== 'map_episode');
-  const mappingJob = jobs.data?.find((j) => j.kind === 'map_episode' && ['queued', 'running'].includes(j.status))
-    ?? (jobs.data?.find((j) => j.kind === 'analyse' && ['queued', 'running'].includes(j.status)) && !map.data ? { progress: 5, message: 'Reading the episode' } as Job : undefined);
+  // Ingestion progress only; modules show their own job progress in their panels.
+  const activeJob = jobs.data?.find((j) => ['queued', 'running'].includes(j.status) && ['transcribe', 'youtube_import'].includes(j.kind));
+  const onPrimaryView = useCallback((shown: boolean) => setModuleView(shown), []);
   const failedJob = jobs.data?.[0]?.status === 'failed' ? jobs.data[0] : null;
 
   function playAt(ms: number) {
@@ -120,14 +115,11 @@ export function SourceDetailPage() {
             </div>
           )}
 
-          {(segments.data || map.data) && (
-            <EpisodeMap source={s} map={map.data ?? null} briefs={briefs.data ?? []}
-              mapping={mappingJob ? { progress: mappingJob.progress, message: mappingJob.message } : null}
-              onPlay={playAt} onQueued={() => { void jobs.refetch(); void briefs.refetch(); }} />
-          )}
+          <Slot name="source.main" source={s} briefs={briefs.data ?? []} jobs={jobs.data ?? []}
+            onPlay={playAt} onQueued={() => { void jobs.refetch(); void briefs.refetch(); }} onPrimaryView={onPrimaryView} />
 
           {segments.data && (
-            <details className="group" open={!map.data}>
+            <details className="group" open={!moduleView}>
               <summary className="flex flex-wrap items-baseline justify-between gap-3 mb-2 cursor-pointer list-none">
                 <h2 className="text-lg font-semibold"><span className="inline-block w-4 text-ink-faint group-open:rotate-90 transition-transform">›</span> Transcript</h2>
                 <div className="flex items-center gap-4 text-sm">
@@ -249,6 +241,7 @@ function SegmentRow({ seg, timed, active, canEdit, onSeek, onSaved }: {
 function GenerateBriefs({ source, disabled, uncertain, onQueued }: { source: Source; disabled: boolean; uncertain: number; onQueued: () => void }) {
   const { org, brands, shows, can } = useOrg();
   const [picked, setPicked] = useState<string[]>([]);
+  const mapOn = useModules().isEnabled('episode_map');
   const eligible = shows.filter((sh) => {
     if (sh.archived_at || !can(WORK_ROLES, sh.brand_id, sh.id)) return false;
     if (source.share_scope === 'organisation') return true;
@@ -269,13 +262,12 @@ function GenerateBriefs({ source, disabled, uncertain, onQueued }: { source: Sou
 
   return (
     <div className="panel p-4">
-      <h2 className="font-semibold">General brief</h2>
-      <p className="text-sm text-ink-soft mt-0.5 mb-3">Skip the map and let Orb.IT choose the angle for each show. To develop a specific conversation, use the episode map.</p>
-      {eligible.some((sh) => !brands.find((b) => b.id === sh.brand_id)?.current_profile_version_id) && (
-        <p className="text-[13px] text-ink mb-3 bg-signal-soft rounded px-2 py-1">
-          Some brands have no approved brand profile. Their briefs will not reflect station-wide identity and standards until one is approved.
-        </p>
-      )}
+      <h2 className="font-semibold">{mapOn ? 'General brief' : 'Develop briefs'}</h2>
+      <p className="text-sm text-ink-soft mt-0.5 mb-3">
+        {mapOn ? 'Skip the map and let Orb.IT choose the angle for each show. To develop a specific conversation, use the episode map.'
+          : 'Pick the shows to write for. Each gets its own treatment, built from its approved profile.'}
+      </p>
+      <Slot name="source.generateNotice" source={source} shows={eligible} />
       {uncertain > 0 && <p className="text-[13px] text-ink mb-3 bg-signal-soft rounded px-2 py-1">{uncertain} uncertain passage{uncertain === 1 ? '' : 's'}: correct the important ones first for better evidence.</p>}
       {eligible.length === 0 ? <p className="text-sm text-ink-faint">No shows you can work on can use this source under its sharing setting.</p> : (
         <ul className="space-y-1.5 mb-3">
@@ -284,7 +276,7 @@ function GenerateBriefs({ source, disabled, uncertain, onQueued }: { source: Sou
               <label className={`flex items-start gap-2 text-sm ${sh.current_profile_version_id ? '' : 'text-ink-faint'}`}>
                 <input type="checkbox" className="mt-1" disabled={!sh.current_profile_version_id} checked={picked.includes(sh.id)}
                   onChange={(e) => setPicked(e.target.checked ? [...picked, sh.id] : picked.filter((x) => x !== sh.id))} />
-                <span>{sh.name} <span className="text-ink-faint">· {brands.find((b) => b.id === sh.brand_id)?.name}{brands.find((b) => b.id === sh.brand_id)?.current_profile_version_id ? '' : ' (no brand profile)'}</span>
+                <span>{sh.name} <span className="text-ink-faint">· {brands.find((b) => b.id === sh.brand_id)?.name}</span>
                   {!sh.current_profile_version_id && <Link to="/shows/$showId" params={{ showId: sh.id }} className="block underline">Approve a profile first</Link>}
                 </span>
               </label>
@@ -310,16 +302,7 @@ function SourceFacts({ source, canEdit, onSaved }: { source: Source; canEdit: bo
   return (
     <div className="panel p-4 text-sm space-y-3">
       <h2 className="font-semibold">Source record</h2>
-      {source.external?.platform === 'youtube' && (
-        <a href={source.external.url ?? source.origin_url ?? '#'} target="_blank" rel="noreferrer" className="flex gap-3 items-start rounded-md border border-line p-2 hover:bg-paper">
-          {source.external.thumbnail && <img src={source.external.thumbnail} alt="" className="w-28 aspect-video object-cover rounded" />}
-          <span className="min-w-0">
-            <span className="block font-semibold leading-snug">{source.external.title}</span>
-            <span className="block text-ink-faint">{[source.external.channel_title, source.external.published_at && new Date(source.external.published_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }), source.external.duration_seconds ? clock(source.external.duration_seconds * 1000) : null].filter(Boolean).join(' · ')}</span>
-            {source.external.caption_track && <span className="block text-ink-faint">Captions: {source.external.caption_track.kind.toLowerCase() === 'asr' ? 'YouTube auto-generated' : source.external.caption_track.name || 'uploaded'} ({source.external.caption_track.language})</span>}
-          </span>
-        </a>
-      )}
+      <Slot name="source.facts" source={source} />
       <dl className="grid grid-cols-[110px_1fr] gap-y-1">
         <dt className="text-ink-faint">Language</dt><dd>{LANGUAGE_LABEL[source.language] ?? source.language}</dd>
         {source.duration_seconds != null && <><dt className="text-ink-faint">Duration</dt><dd>{clock(source.duration_seconds * 1000)}</dd></>}

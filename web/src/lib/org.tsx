@@ -8,9 +8,8 @@ interface OrgState {
   session: Session | null;
   userId: string | null;
   loading: boolean;
-  orgs: Organisation[];
+  /** The organisation this instance serves (each client runs its own instance). */
   org: Organisation | null;
-  setOrgId: (id: string) => void;
   memberships: Membership[];
   brands: Brand[];
   shows: Show[];
@@ -22,15 +21,11 @@ interface OrgState {
 }
 
 const Ctx = createContext<OrgState | null>(null);
-const ORG_KEY = 'orbit.currentOrg';
 
 export function OrgProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient();
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [orgId, setOrgIdState] = useState<string | null>(() => {
-    try { return localStorage.getItem(ORG_KEY); } catch { return null; }
-  });
 
   const currentUser = useRef<string | null | undefined>(undefined);
   useEffect(() => {
@@ -64,10 +59,8 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     queryFn: async () => check(await supabase.from('organisations').select('id,name').order('name')) as Organisation[],
   });
 
-  const org = useMemo(() => {
-    const list = orgs.data ?? [];
-    return list.find((o) => o.id === orgId) ?? list[0] ?? null;
-  }, [orgs.data, orgId]);
+  // One organisation per instance: the one the signed-in user belongs to.
+  const org = useMemo(() => (orgs.data ?? [])[0] ?? null, [orgs.data]);
 
   const brands = useQuery({
     queryKey: ['brands', org?.id],
@@ -88,9 +81,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
       session,
       userId,
       loading: authLoading || (!!userId && (myMemberships.isLoading || orgs.isLoading)),
-      orgs: orgs.data ?? [],
       org,
-      setOrgId: (id) => { try { localStorage.setItem(ORG_KEY, id); } catch { /* storage unavailable */ } setOrgIdState(id); },
       memberships: mine,
       brands: b,
       shows: s,

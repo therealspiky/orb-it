@@ -46,9 +46,3 @@ export function checkState(returned: string | null): string | null {
   if (!returned || !saved || returned !== saved) return null;
   return returned.split('.')[0] ?? null;
 }
-
-export interface ExternalMeta {
-  platform?: 'youtube'; video_id?: string; url?: string; title?: string; channel_id?: string | null; channel_title?: string | null;
-  published_at?: string | null; duration_seconds?: number | null; description?: string | null; thumbnail?: string | null;
-  metadata_source?: 'data_api' | 'oembed'; caption_track?: { kind: string; language: string; name: string };
-}

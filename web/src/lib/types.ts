@@ -44,7 +44,7 @@ export interface Source {
   size_bytes: number | null; checksum_sha256: string | null; duration_seconds: number | null; language: string;
   twi_beta: boolean; rights_status: string; rights_notes: string | null; share_scope: 'show' | 'brand' | 'organisation';
   timestamps_genuine: boolean; author: string | null; status: SourceStatus; status_message: string | null;
-  external: import('./youtube').ExternalMeta;
+  external: ExternalMeta;
   created_at: string;
 }
 export interface Segment {
@@ -140,4 +140,11 @@ export interface EpisodeMapRow {
   id: string; source_id: string; created_at: string; model: string; considered_shows: string[];
   result: { summary: string; conversations: MapConversation[] };
   validation: { skipped_no_profile?: number };
+}
+
+/** Metadata captured from a source's platform (filled in by import modules such as YouTube). */
+export interface ExternalMeta {
+  platform?: string; video_id?: string; url?: string; title?: string; channel_id?: string | null; channel_title?: string | null;
+  published_at?: string | null; duration_seconds?: number | null; description?: string | null; thumbnail?: string | null;
+  metadata_source?: string; caption_track?: { kind: string; language: string; name: string };
 }

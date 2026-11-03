@@ -1,8 +1,9 @@
 import { Navigate, useNavigate } from '@tanstack/react-router';
+import { useQuery } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { ErrorNote, Field } from '../components/ui';
 import { useOrg } from '../lib/org';
-import { supabase } from '../lib/supabase';
+import { check, supabase } from '../lib/supabase';
 
 export function LoginPage() {
   const { session } = useOrg();
@@ -66,32 +67,54 @@ export function LoginPage() {
 }
 
 export function OnboardingPage() {
-  const { session, org, loading, refresh, setOrgId } = useOrg();
+  const { session, org, loading, refresh } = useOrg();
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
+  const status = useQuery({
+    queryKey: ['instance-status', session?.user.id],
+    enabled: !!session,
+    queryFn: async () => check(await supabase.rpc('instance_status')) as { has_organisation: boolean; organisation_name: string | null; is_member: boolean },
+  });
 
   if (!loading && !session) return <Navigate to="/login" />;
   if (!loading && org) return <Navigate to="/" />;
+  if (status.isLoading) return null;
+
+  // The instance already belongs to an organisation: new people are added by its administrators.
+  if (status.data?.has_organisation) {
+    return (
+      <div className="max-w-[560px] mx-auto px-6 py-16">
+        <h1 className="text-2xl font-semibold">Almost there</h1>
+        <p className="mt-2 text-ink-soft">
+          You're signed in as <strong>{session?.user.email}</strong>, but you haven't been added to {status.data.organisation_name ?? 'this organisation'} yet.
+          Ask an administrator to add you under Organisation → People and roles, then reload this page.
+        </p>
+        <div className="mt-6 flex gap-3">
+          <button className="btn btn-primary" onClick={() => { refresh(); void status.refetch(); }}>Check again</button>
+          <button className="btn btn-quiet" onClick={() => supabase.auth.signOut()}>Sign out</button>
+        </div>
+      </div>
+    );
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true); setError(null);
-    const { data, error } = await supabase.rpc('create_organisation', { p_name: name.trim() });
+    const { error } = await supabase.rpc('create_organisation', { p_name: name.trim() });
     setBusy(false);
     if (error) return setError(error);
-    setOrgId(data as string);
     refresh();
     void navigate({ to: '/admin' });
   }
 
   return (
     <div className="max-w-[560px] mx-auto px-6 py-16">
-      <h1 className="text-2xl font-semibold">Set up your media organisation</h1>
+      <h1 className="text-2xl font-semibold">Set up this Orb.IT instance</h1>
       <p className="mt-2 text-ink-soft">
-        You will be its administrator. Next you add brands (stations, channels), their shows, and invite your team.
-        If a colleague already set Orb.IT up, ask them to add you instead; you will see their organisation after signing in again.
+        You're the first person here, so you'll be the administrator. Name the media organisation this instance serves;
+        then add its brands (stations, channels), their shows, and your team.
       </p>
       <form onSubmit={submit} className="mt-8 space-y-4">
         <Field label="Organisation name" help="For example, the media group that owns your stations and channels.">

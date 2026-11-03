@@ -1,4 +1,5 @@
-import { Link, useParams } from '@tanstack/react-router';
+import { useParams } from '@tanstack/react-router';
+import { Slot } from '../modules/runtime';
 import { ProfileEditor } from '../components/ProfileEditor';
 import { Spinner } from '../components/ui';
 import { useOrg } from '../lib/org';
@@ -19,9 +20,8 @@ export function ShowProfilePage() {
       groups={PROFILE_GROUPS}
       title={`${show.name} profile`}
       lede={<>
-        Part of <Link to="/brands/$brandId" params={{ brandId: show.brand_id }} className="underline">{brand?.name ?? 'its brand'}</Link>
-        {brand && !brand.current_profile_version_id && ' (brand profile not yet approved)'}.
-        The show profile sets this programme's remit, tone and format within the brand profile. Existing briefs keep the version they were written with.
+        {brand?.name}. The show profile sets this programme's remit, tone and format. Existing briefs keep the version they were written with.
+        {' '}<Slot name="showProfile.lede" show={show} />
       </>}
       canEdit={can(WORK_ROLES, show.brand_id, show.id)}
       canApprove={can(EDITOR_ROLES, show.brand_id, show.id)}

@@ -6,11 +6,13 @@ import { useOrg } from '../lib/org';
 import { check, supabase } from '../lib/supabase';
 import type { Brief, Job } from '../lib/types';
 import { BriefTable } from './Briefs';
+import { useModules } from '../modules/runtime';
 
-const JOB_LABEL: Record<string, string> = { transcribe: 'Transcription', analyse: 'Source analysis', generate_briefs: 'Brief writing' };
+const JOB_LABEL: Record<string, string> = { transcribe: 'Transcription', analyse: 'Source analysis', generate_briefs: 'Brief writing', map_episode: 'Episode map', youtube_import: 'YouTube import', youtube_connect: 'YouTube connection' };
 
 export function HomePage() {
   const { org, shows, brands, can } = useOrg();
+  const { isEnabled } = useModules();
   const jobs = useQuery({
     queryKey: ['jobs', org!.id],
     refetchInterval: 5000,
@@ -24,7 +26,7 @@ export function HomePage() {
   const needsProfile = shows.filter((s) => !s.archived_at && !s.current_profile_version_id);
   const setupSteps = [
     { done: brands.length > 0, text: 'Add your brands and their shows', to: '/admin' as const },
-    { done: brands.some((b) => b.current_profile_version_id), text: 'Approve a brand profile for each station or channel', to: '/admin' as const },
+    ...(isEnabled('brand_profiles') ? [{ done: brands.some((b) => b.current_profile_version_id), text: 'Approve a brand profile for each station or channel', to: '/admin' as const }] : []),
     { done: shows.length > 0 && needsProfile.length < shows.length, text: 'Approve an editorial profile for each show', to: '/admin' as const },
     { done: (jobs.data ?? []).some((j) => j.kind === 'transcribe'), text: 'Add a programme recording as a source', to: '/sources' as const },
     { done: (recent.data ?? []).length > 0, text: 'Write briefs for the shows that source can serve', to: '/sources' as const },

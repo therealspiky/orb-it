@@ -9,6 +9,7 @@ import {
   ContinuationSection, DecisionSection, GuestsSection, RundownSection, SectionHead, SocialSection, TreatmentSection,
 } from '../components/brief/Sections';
 import { BriefBadge, ErrorNote, Spinner } from '../components/ui';
+import { Slot } from '../modules/runtime';
 import { briefToMarkdown, download } from '../lib/exportBrief';
 import { ago } from '../lib/format';
 import { useOrg, usePeople } from '../lib/org';
@@ -79,20 +80,6 @@ export function BriefWorkspace() {
     enabled: !!current?.profile_version_id,
     queryFn: async () => (await supabase.from('show_profile_versions').select('version,profile').eq('id', current!.profile_version_id!).maybeSingle()).data as
       { version: number; profile: Record<string, Record<string, unknown>> } | null,
-  });
-  const conversation = useQuery({
-    queryKey: ['brief-conversation', b?.episode_map_id, b?.conversation_key],
-    enabled: !!b?.episode_map_id && !!b?.conversation_key,
-    queryFn: async () => {
-      const r = (await supabase.from('episode_maps').select('result').eq('id', b!.episode_map_id!).maybeSingle()).data as { result: { conversations: { key: string; question: string }[] } } | null;
-      return r?.result.conversations.find((c) => c.key === b!.conversation_key)?.question ?? null;
-    },
-  });
-  const brandProfile = useQuery({
-    queryKey: ['brand-profile-version', current?.brand_profile_version_id],
-    enabled: !!current?.brand_profile_version_id,
-    queryFn: async () => (await supabase.from('brand_profile_versions').select('version').eq('id', current!.brand_profile_version_id!).maybeSingle()).data as
-      { version: number } | null,
   });
   const tasks = useQuery({
     queryKey: ['tasks', briefId],
@@ -177,18 +164,12 @@ export function BriefWorkspace() {
         <div className="flex flex-wrap items-start justify-between gap-4 mt-1">
           <div className="min-w-0 max-w-[80ch]">
             <h1 className="text-[28px] leading-tight font-semibold tracking-[-0.015em]">{draft.title}</h1>
-            {conversation.data && source.data && (
-              <p className="mt-1 text-sm text-ink-soft">
-                Developed from the conversation <Link to="/sources/$sourceId" params={{ sourceId: source.data.id }} className="underline">“{conversation.data}”</Link>
-              </p>
-            )}
+            <Slot name="brief.headerLine" brief={b} version={current} sourceId={source.data?.id ?? null} />
             <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-soft">
               <BriefBadge status={b.status} />
               <span>{draft.recommendation === 'research' ? 'Recommendation: research first' : 'Recommendation: proceed'}</span>
               <span>Version {current.version}, {current.generated ? `drafted by ${current.model}` : `edited by ${person(current.created_by)}`} {ago(current.created_at)}</span>
-              {current.brand_profile_version_id
-                ? <Link to="/brands/$brandId" params={{ brandId: b.brand_id }} className="underline">Brand profile{brandProfile.data ? ` v${brandProfile.data.version}` : ''}</Link>
-                : <Link to="/brands/$brandId" params={{ brandId: b.brand_id }} className="underline text-signal">No brand profile applied</Link>}
+              <Slot name="brief.headerMeta" brief={b} version={current} />
               {profile.data && <Link to="/shows/$showId" params={{ showId: b.show_id }} className="underline">Show profile v{profile.data.version}</Link>}
               {source.data && <Link to="/sources/$sourceId" params={{ sourceId: source.data.id }} className="underline">Source</Link>}
             </p>

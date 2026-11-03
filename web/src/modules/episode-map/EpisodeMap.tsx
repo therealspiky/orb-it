@@ -2,11 +2,11 @@ import { useMutation } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { Play, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
-import { ago, clock } from '../lib/format';
-import { useOrg } from '../lib/org';
-import { check, supabase } from '../lib/supabase';
-import { WORK_ROLES, type Brief, type EpisodeMapRow, type MapConversation, type Show, type Source } from '../lib/types';
-import { BriefBadge, ErrorNote, Progress } from './ui';
+import { ago, clock } from '../../lib/format';
+import { useOrg } from '../../lib/org';
+import { check, supabase } from '../../lib/supabase';
+import { WORK_ROLES, type Brief, type EpisodeMapRow, type MapConversation, type Show, type Source } from '../../lib/types';
+import { BriefBadge, ErrorNote, Progress } from '../../components/ui';
 
 export const PLATFORM_LABEL: Record<string, string> = {
   radio: 'Radio', tv: 'TV', youtube: 'YouTube', tiktok: 'TikTok', instagram_reels: 'Instagram Reels',

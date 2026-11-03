@@ -1,9 +1,9 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ago } from '../lib/format';
-import { useOrg, usePeople } from '../lib/org';
-import { check, supabase } from '../lib/supabase';
-import { GOOGLE_CLIENT_ID, startYouTubeConnect } from '../lib/youtube';
-import { ErrorNote } from './ui';
+import { ago } from '../../lib/format';
+import { useOrg, usePeople } from '../../lib/org';
+import { check, supabase } from '../../lib/supabase';
+import { GOOGLE_CLIENT_ID, startYouTubeConnect } from './youtube';
+import { ErrorNote } from '../../components/ui';
 
 interface Connection {
   id: string; channel_id: string; channel_title: string | null; channel_thumb: string | null;
