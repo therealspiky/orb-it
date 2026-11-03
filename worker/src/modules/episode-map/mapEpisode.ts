@@ -1,12 +1,13 @@
-import type { Config } from '../config.js';
-import { audit, getSegments, getSource, jobProgress, must, type Db } from '../lib/db.js';
-import type { LlmClient } from '../lib/llm.js';
-import { describeSource, MAP_PROMPT_VERSION, MAP_SYSTEM, mapUserPrompt, renderTranscript, type MapShowContext } from '../lib/prompts.js';
-import { EpisodeMapSchema } from '../lib/schemas.js';
-import { validateMap } from '../lib/validateMap.js';
-import { PermanentError, type JobRow, type SourceRow } from '../types.js';
-import { ensureAnalysis, transcriptFingerprint } from './analyse.js';
-import { sourceUsableFor } from './generateBriefs.js';
+import type { Config } from '../../config.js';
+import { audit, getSegments, getSource, jobProgress, must, type Db } from '../../lib/db.js';
+import type { LlmClient } from '../../lib/llm.js';
+import { describeSource, renderTranscript } from '../../lib/prompts.js';
+import { MAP_PROMPT_VERSION, MAP_SYSTEM, mapUserPrompt, type MapShowContext } from './prompts.js';
+import { EpisodeMapSchema } from './schema.js';
+import { validateMap } from './validateMap.js';
+import { PermanentError, type JobRow, type SourceRow } from '../../types.js';
+import { ensureAnalysis, transcriptFingerprint } from '../../jobs/analyse.js';
+import { sourceUsableFor } from '../../jobs/generateBriefs.js';
 
 export interface MapDeps { db: Db; cfg: Config; llm: LlmClient }
 

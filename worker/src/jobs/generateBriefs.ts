@@ -5,10 +5,11 @@ import type { LlmClient } from '../lib/llm.js';
 import { BRIEF_PROMPT_VERSION, BRIEF_SYSTEM, briefUserPrompt, describeSource, renderTranscript, type BriefFocus } from '../lib/prompts.js';
 import { BriefSchema, type Brief } from '../lib/schemas.js';
 import { validateBrief, type EvidenceRow } from '../lib/validateBrief.js';
+import type { ModuleState } from '../modules/types.js';
 import { PermanentError, type JobRow, type SourceRow } from '../types.js';
 import { ensureAnalysis } from './analyse.js';
 
-export interface GenerateDeps { db: Db; cfg: Config; llm: LlmClient }
+export interface GenerateDeps { db: Db; cfg: Config; llm: LlmClient; modules?: ModuleState }
 
 interface ShowRow {
   id: string; org_id: string; brand_id: string; name: string; archived_at: string | null;
@@ -137,7 +138,8 @@ export async function runGenerateBriefs(job: JobRow, deps: GenerateDeps): Promis
     if (pv.status !== 'approved') { skipped.push({ show: show.name, reason: 'profile not approved' }); continue; }
 
     // Brand profile: applied when approved; its absence is recorded as unresolved, not guessed.
-    const bpvId = show.brands?.current_profile_version_id ?? null;
+    const brandProfilesOn = deps.modules ? deps.modules.isEnabled('brand_profiles') : true;
+    const bpvId = brandProfilesOn ? show.brands?.current_profile_version_id ?? null : null;
     const bpvRow = bpvId
       ? (await db.from('brand_profile_versions').select('id,version,profile,status').eq('id', bpvId).maybeSingle()).data as
           { id: string; version: number; profile: any; status: string } | null
@@ -154,7 +156,7 @@ export async function runGenerateBriefs(job: JobRow, deps: GenerateDeps): Promis
       cachedContext: transcriptBlock,
       user: briefUserPrompt({
         showName: show.name, brandName: show.brands?.name ?? '', profile: pv.profile, profileVersion: pv.version,
-        brandProfile: bpv?.profile ?? null, brandProfileVersion: bpv?.version ?? null,
+        brandProfile: bpv?.profile ?? null, brandProfileVersion: bpv?.version ?? null, brandProfilesEnabled: brandProfilesOn,
         analysis, priorCoverage: prior.map((p) => ({ title: p.title, status: p.status, reason: p.status_reason })),
         siblingTreatments: siblings,
         focus: conversation ? focusFor(conversation, show.id) : null,
@@ -166,7 +168,7 @@ export async function runGenerateBriefs(job: JobRow, deps: GenerateDeps): Promis
     });
 
     const v = validateBrief(res.value, segments, src, profileSlot(pv.profile, bpv?.profile));
-    if (!bpv && !v.brief.unresolved.some((u) => /brand profile/i.test(u.field))) {
+    if (brandProfilesOn && !bpv && !v.brief.unresolved.some((u) => /brand profile/i.test(u.field))) {
       v.brief.unresolved.push({ field: 'brand profile', reason: `${show.brands?.name ?? 'This brand'} has no approved brand profile, so station-wide identity and standards were not applied.`,
         next_action: 'Approve a brand profile, then review this brief against it.', owner_role: 'brand_editor' });
     }

@@ -1,35 +1,43 @@
 import { loadConfig } from './config.js';
 import { runAnalyse } from './jobs/analyse.js';
 import { runGenerateBriefs } from './jobs/generateBriefs.js';
-import { runMapEpisode } from './jobs/mapEpisode.js';
-import { makeYouTube, runYouTubeConnect, runYouTubeImport } from './jobs/youtube.js';
 import { runTranscribe } from './jobs/transcribe.js';
 import { makeDb, setSourceStatus } from './lib/db.js';
 import { AnthropicLlm } from './lib/llm.js';
-import { makeTranscriber } from './lib/transcribers.js';
+import { INSTALLED_MODULES } from './modules/index.js';
+import { InstanceModules } from './modules/state.js';
+import type { ModuleContext } from './modules/types.js';
 import { PermanentError, type JobRow } from './types.js';
 
 const cfg = loadConfig();
 const db = makeDb(cfg);
 const llm = new AnthropicLlm(cfg.anthropicKey, cfg.anthropicWorkspaceId);
-const transcriber = makeTranscriber(cfg);
-const yt = makeYouTube(cfg);
+const modules = new InstanceModules(db, cfg, INSTALLED_MODULES);
+const ctx: ModuleContext = { db, cfg, llm, modules };
 let stopping = false;
 
 function log(msg: string, extra: Record<string, unknown> = {}) {
   console.log(JSON.stringify({ t: new Date().toISOString(), worker: cfg.workerId, msg, ...extra }));
 }
 
+/** Core jobs run on every instance; module jobs only when the module is installed and licensed. */
 async function execute(job: JobRow): Promise<Record<string, unknown>> {
+  await modules.refresh();
   switch (job.kind) {
-    case 'transcribe': return runTranscribe(job, { db, cfg, transcriber });
-    case 'analyse': return runAnalyse(job, { db, cfg, llm });
-    case 'generate_briefs': return runGenerateBriefs(job, { db, cfg, llm });
-    case 'map_episode': return runMapEpisode(job, { db, cfg, llm });
-    case 'youtube_import': return runYouTubeImport(job, { db, cfg, yt });
-    case 'youtube_connect': return runYouTubeConnect(job, { db, cfg, yt });
-    default: throw new PermanentError(`Unknown job kind ${(job as JobRow).kind}`);
+    case 'transcribe': {
+      const rec = modules.isEnabled('recording_transcription') ? modules.installed('recording_transcription') : undefined;
+      return runTranscribe(job, { db, cfg, media: rec?.mediaTranscriber?.(cfg) ?? null });
+    }
+    case 'analyse': return runAnalyse(job, { db, cfg, llm, modules });
+    case 'generate_briefs': return runGenerateBriefs(job, { db, cfg, llm, modules });
   }
+  const owner = modules.ownerOf(job.kind);
+  if (!owner) throw new PermanentError(`No installed module handles "${job.kind}" jobs on this worker`);
+  if (!modules.isEnabled(owner.key)) {
+    const why = modules.notReady.get(owner.key);
+    throw new PermanentError(why ? `${owner.label} is not configured on this worker: ${why}` : `${owner.label} is not enabled on this Orb.IT instance`);
+  }
+  return owner.jobs![job.kind]!(job, ctx);
 }
 
 async function handle(job: JobRow) {
@@ -66,8 +74,8 @@ async function handle(job: JobRow) {
 }
 
 async function loop() {
-  log('worker.start', { provider: cfg.transcribeProvider, analysis: cfg.analysisModel, brief: cfg.briefModel,
-    youtube: { connect: !!(cfg.googleClientId && cfg.googleClientSecret), apiKey: !!cfg.youtubeApiKey } });
+  await modules.refresh(true).catch((e) => log('modules.error', { error: (e as Error).message }));
+  log('worker.start', { analysis: cfg.analysisModel, brief: cfg.briefModel, modules: modules.summary() });
   while (!stopping) {
     const { data, error } = await db.rpc('claim_job', { p_worker: cfg.workerId });
     if (error) {

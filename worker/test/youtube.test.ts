@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chooseCaptionTrack, isYouTubeUrl, parseIsoDuration, parseVideoId, YouTubeClient, type FetchLike } from '../src/lib/youtube.js';
+import { chooseCaptionTrack, isYouTubeUrl, parseIsoDuration, parseVideoId, YouTubeClient, type FetchLike } from '../src/modules/youtube/client.js';
 import { parseTextTranscript } from '../src/lib/textTranscript.js';
 import { PermanentError } from '../src/types.js';
 

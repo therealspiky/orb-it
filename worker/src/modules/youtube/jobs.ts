@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
-import type { Config } from '../config.js';
-import { audit, getSource, jobProgress, setSourceStatus, type Db } from '../lib/db.js';
-import { chooseCaptionTrack, parseVideoId, YouTubeClient } from '../lib/youtube.js';
-import { PermanentError, type JobRow } from '../types.js';
+import type { Config } from '../../config.js';
+import { audit, getSource, jobProgress, setSourceStatus, type Db } from '../../lib/db.js';
+import { chooseCaptionTrack, parseVideoId, YouTubeClient } from './client.js';
+import { PermanentError, type JobRow } from '../../types.js';
 
 export interface YouTubeDeps { db: Db; cfg: Config; yt: YouTubeClient }
 

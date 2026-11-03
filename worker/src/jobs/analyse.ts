@@ -4,9 +4,10 @@ import { audit, getSegments, getSource, jobProgress, type Db } from '../lib/db.j
 import { estimateTokens, type LlmClient } from '../lib/llm.js';
 import { ANALYSIS_PROMPT_VERSION, ANALYSIS_SYSTEM, describeSource, renderTranscript } from '../lib/prompts.js';
 import { AnalysisSchema, type Analysis } from '../lib/schemas.js';
+import type { ModuleState } from '../modules/types.js';
 import { PermanentError, type JobRow, type Segment, type SourceRow } from '../types.js';
 
-export interface AnalyseDeps { db: Db; cfg: Config; llm: LlmClient }
+export interface AnalyseDeps { db: Db; cfg: Config; llm: LlmClient; modules?: ModuleState }
 
 export function transcriptFingerprint(segments: Segment[]): string {
   const h = createHash('sha256');
@@ -68,8 +69,8 @@ export async function runAnalyse(job: JobRow, deps: AnalyseDeps): Promise<Record
   if (!segments.length) throw new PermanentError('Source has no transcript yet');
   await jobProgress(deps.db, job.id, 20, 'Extracting themes, claims and usable moments');
   const { analysis, reused } = await ensureAnalysis(deps.db, deps.cfg, deps.llm, src, segments);
-  // Next: map the episode's conversations (content inventory).
-  await deps.db.from('jobs').upsert({
+  // Next, when the episode map module is on: map the episode's conversations.
+  if (deps.modules?.isEnabled('episode_map')) await deps.db.from('jobs').upsert({
     org_id: src.org_id, kind: 'map_episode', payload: { source_id: src.id },
     idempotency_key: `map:${src.id}:${transcriptFingerprint(segments)}`, created_by: job.created_by,
   }, { onConflict: 'org_id,idempotency_key', ignoreDuplicates: true });

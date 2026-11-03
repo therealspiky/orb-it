@@ -93,13 +93,14 @@ select public.add_member((select v from t_ids where k='org'), 'sales@orbit.test'
 reset role;
 commit;
 
--- D runs their own organisation
-begin;
-select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000d', true);
-set local role authenticated;
-select public.create_organisation('Other Group');
-reset role;
-commit;
+-- Single-instance guard: nobody can create a second organisation from the app.
+do $$ begin
+  perform pg_temp.ok(pg_temp.fails_as('00000000-0000-0000-0000-00000000000d', $q$select public.create_organisation('Other Group')$q$),
+    'a second organisation cannot be created on an instance');
+end $$;
+-- Defence in depth: tenant isolation still holds if a second organisation exists (inserted by the system).
+insert into organisations (id, name) values ('99999999-9999-9999-9999-999999999999', 'Other Group');
+insert into memberships (org_id, user_id, role) values ('99999999-9999-9999-9999-999999999999', '00000000-0000-0000-0000-00000000000d', 'org_admin');
 
 do $$ begin
   perform pg_temp.ok((select count(*) from profiles) = 5, 'profiles mirrored from auth.users');
@@ -481,6 +482,54 @@ do $$ begin
   perform pg_temp.ok(pg_temp.fails_as('00000000-0000-0000-0000-00000000000a',
     format($q$update sources set external='{"title":"x"}' where id=%L$q$, (select v from t_ids where k='src_shared'))),
     'platform metadata is written by the worker, not edited by users');
+end $$;
+
+-- Modules ---------------------------------------------------------------------------
+do $$
+declare st jsonb;
+begin
+  perform set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000b', true);
+  execute 'set local role authenticated';
+  st := public.instance_status();
+  execute 'reset role';
+  perform pg_temp.ok((st->>'has_organisation')::boolean and (st->>'is_member')::boolean and st->>'organisation_name' = 'Test Media Group',
+    'instance status reports the organisation and membership');
+  perform pg_temp.ok(pg_temp.count_as('00000000-0000-0000-0000-00000000000b', 'select * from instance_modules') >= 4,
+    'everyone signed in can see which modules are enabled');
+  perform pg_temp.ok(pg_temp.fails_as('00000000-0000-0000-0000-00000000000a', $q$update instance_modules set enabled = true where key = 'youtube'$q$)
+    or (select count(*) from instance_modules where updated_at > now() - interval '1 second') = 0,
+    'even an organisation admin cannot change module licensing');
+
+  update instance_modules set enabled = false where key in ('episode_map', 'youtube', 'brand_profiles', 'recording_transcription');
+
+  perform pg_temp.ok(pg_temp.fails_as('00000000-0000-0000-0000-00000000000b',
+    format($q$select public.enqueue_job(%L, 'map_episode', %L::jsonb, 'mod-1')$q$, (select v from t_ids where k='org'),
+      jsonb_build_object('source_id', (select v from t_ids where k='src_shared')))),
+    'episode map jobs are refused when the module is off');
+  perform pg_temp.ok(pg_temp.fails_as('00000000-0000-0000-0000-00000000000a',
+    format($q$select public.enqueue_job(%L, 'youtube_import', %L::jsonb, 'mod-2')$q$, (select v from t_ids where k='org'),
+      jsonb_build_object('source_id', (select v from t_ids where k='src_shared')))),
+    'YouTube imports are refused when the module is off');
+  perform pg_temp.ok(pg_temp.fails_as('00000000-0000-0000-0000-00000000000a',
+    format($q$select public.submit_youtube_oauth_code(%L, 'c', 'http://localhost/x')$q$, (select v from t_ids where k='org'))),
+    'channel connection is refused when the YouTube module is off');
+  perform pg_temp.ok(pg_temp.fails_as('00000000-0000-0000-0000-00000000000a',
+    format($q$select public.create_brand_profile_draft(%L, '{}'::jsonb)$q$, (select v from t_ids where k='hitz'))),
+    'brand profiles cannot be drafted when the module is off');
+  perform pg_temp.ok(pg_temp.fails_as('00000000-0000-0000-0000-00000000000b',
+    format($q$insert into sources (org_id, brand_id, show_id, kind, title) values (%L, %L, %L, 'recording', 'r') returning id$q$,
+      (select v from t_ids where k='org'), (select v from t_ids where k='hitz'), (select v from t_ids where k='hitz_morning'))),
+    'recordings cannot be added when recording transcription is off');
+  perform pg_temp.ok(not pg_temp.fails_as('00000000-0000-0000-0000-00000000000b',
+    format($q$insert into sources (org_id, brand_id, show_id, kind, title) values (%L, %L, %L, 'transcript', 't') returning id$q$,
+      (select v from t_ids where k='org'), (select v from t_ids where k='hitz'), (select v from t_ids where k='hitz_morning'))),
+    'core transcript sources still work with every optional module off');
+  perform pg_temp.ok(not pg_temp.fails_as('00000000-0000-0000-0000-00000000000b',
+    format($q$select public.enqueue_job(%L, 'generate_briefs', %L::jsonb, 'mod-3')$q$, (select v from t_ids where k='org'),
+      jsonb_build_object('source_id', (select v from t_ids where k='src_shared'), 'show_ids', jsonb_build_array((select v from t_ids where k='hitz_morning'))))),
+    'core brief writing still works with every optional module off');
+
+  update instance_modules set enabled = true;
 end $$;
 
 \echo 'database tests complete'

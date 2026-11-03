@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { focusFor } from '../src/jobs/generateBriefs.js';
-import { briefUserPrompt, mapUserPrompt } from '../src/lib/prompts.js';
-import { EpisodeMapSchema, type EpisodeMap } from '../src/lib/schemas.js';
-import { validateMap } from '../src/lib/validateMap.js';
+import { briefUserPrompt } from '../src/lib/prompts.js';
+import { mapUserPrompt } from '../src/modules/episode-map/prompts.js';
+import { EpisodeMapSchema, type EpisodeMap } from '../src/modules/episode-map/schema.js';
+import { validateMap } from '../src/modules/episode-map/validateMap.js';
 import { segments } from './fixtures.js';
 
 const shows = [

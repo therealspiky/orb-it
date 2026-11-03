@@ -1,6 +1,6 @@
-import type { EpisodeMap } from './schemas.js';
-import { normaliseForMatch, type CheckResult } from './validateBrief.js';
-import type { Segment } from '../types.js';
+import type { EpisodeMap } from './schema.js';
+import { normaliseForMatch, type CheckResult } from '../../lib/validateBrief.js';
+import type { Segment } from '../../types.js';
 
 export interface MapShow { id: string; name: string; brand: string }
 

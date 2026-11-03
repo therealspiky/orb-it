@@ -3,7 +3,7 @@
  * (videos, channels, captions) and oEmbed. Captions are downloaded only with
  * the channel owner's authorisation.
  */
-import { PermanentError } from '../types.js';
+import { PermanentError } from '../../types.js';
 
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 

@@ -66,11 +66,6 @@ export function loadConfig(): Config {
     googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || undefined,
     youtubeApiKey: process.env.YOUTUBE_API_KEY || undefined,
   };
-  if (cfg.transcribeProvider === 'openai' && !cfg.openaiKey) {
-    throw new Error('OPENAI_API_KEY is required when TRANSCRIBE_PROVIDER=openai');
-  }
-  if (cfg.transcribeProvider === 'deepgram' && !cfg.deepgramKey) {
-    throw new Error('DEEPGRAM_API_KEY is required when TRANSCRIBE_PROVIDER=deepgram');
-  }
+  // Transcription keys are checked by the recording module (transcript-only instances do not need them).
   return cfg;
 }

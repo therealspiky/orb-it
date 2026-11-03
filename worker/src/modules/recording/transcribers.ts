@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
-import type { Config } from '../config.js';
-import type { Segment } from '../types.js';
-import { extractAudio, extractAudioChunks } from './media.js';
+import type { Config } from '../../config.js';
+import type { Segment } from '../../types.js';
+import { extractAudio, extractAudioChunks } from '../../lib/media.js';
 
 export interface TranscriptResult {
   provider: string;

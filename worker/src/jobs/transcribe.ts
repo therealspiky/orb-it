@@ -5,7 +5,7 @@ import type { Config } from '../config.js';
 import { audit, getSource, jobProgress, setSourceStatus, type Db } from '../lib/db.js';
 import { probe, sha256File } from '../lib/media.js';
 import { parseTextTranscript } from '../lib/textTranscript.js';
-import type { Transcriber } from '../lib/transcribers.js';
+import type { MediaTranscriber } from '../modules/types.js';
 import { PermanentError, type JobRow, type Segment } from '../types.js';
 import mammoth from 'mammoth';
 
@@ -23,7 +23,8 @@ export async function readTextSource(path: string, mime: string | null, bytes: B
   return bytes.toString('utf8').replace(/^\uFEFF/, '');
 }
 
-export interface TranscribeDeps { db: Db; cfg: Config; transcriber: Transcriber }
+/** media is provided by the recording module when it is installed and enabled. */
+export interface TranscribeDeps { db: Db; cfg: Config; media: MediaTranscriber | null }
 
 async function storeSegments(db: Db, orgId: string, sourceId: string, segments: Segment[]) {
   // Re-processing is only safe while nothing cites this transcript.
@@ -41,7 +42,7 @@ async function storeSegments(db: Db, orgId: string, sourceId: string, segments: 
 }
 
 export async function runTranscribe(job: JobRow, deps: TranscribeDeps): Promise<Record<string, unknown>> {
-  const { db, cfg, transcriber } = deps;
+  const { db, cfg, media } = deps;
   const sourceId = String(job.payload.source_id ?? '');
   const src = await getSource(db, sourceId);
   if (src.org_id !== job.org_id) throw new PermanentError('Source belongs to another organisation');
@@ -75,7 +76,8 @@ export async function runTranscribe(job: JobRow, deps: TranscribeDeps): Promise<
       if (!p.hasAudio) throw new PermanentError('The recording has no audio track');
       if (p.durationSeconds < 1) throw new PermanentError('The recording is empty');
       duration = p.durationSeconds;
-      const result = await transcriber.transcribe(local, work, src.language, (pct, msg) => jobProgress(db, job.id, pct, msg));
+      if (!media) throw new PermanentError('Recording transcription is not enabled on this Orb.IT instance. Add a transcript instead.');
+      const result = await media.transcribe(local, work, src.language, (pct, msg) => jobProgress(db, job.id, pct, msg));
       segments = result.segments;
       timestampsGenuine = true;
       providerInfo = { provider: result.provider, model: result.model, format: p.formatName, has_video: p.hasVideo };

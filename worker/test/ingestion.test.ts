@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { extractAudioChunks, probe, sha256File } from '../src/lib/media.js';
 import { parseTextTranscript } from '../src/lib/textTranscript.js';
-import { mapDeepgramUtterances, mapWhisperSegments } from '../src/lib/transcribers.js';
+import { mapDeepgramUtterances, mapWhisperSegments } from '../src/modules/recording/transcribers.js';
 import { cleanAnalysis, transcriptFingerprint } from '../src/jobs/analyse.js';
 import { segments } from './fixtures.js';
 
